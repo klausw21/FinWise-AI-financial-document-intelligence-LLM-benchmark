@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block nav_history %}active{% endblock %}
+{% block page_head %}
+<div class="page-header">
+  <h1 data-i18n="page.history.title">History</h1>
+  <p class="muted" data-i18n="page.history.sub">Every document you've processed — filter, re-open, re-run, or delete.</p>
+</div>
+{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="hist-filters">
+    <div class="field"><label data-i18n="field.type">Document type</label>
+      <select id="histType"><option value="" data-i18n="hist.all">All</option>
+        {% for t in types %}<option value="{{t}}">{{t}}</option>{% endfor %}</select></div>
+    <div class="field"><label data-i18n="hist.status">Status</label>
+      <select id="histStatus">
+        <option value="" data-i18n="hist.all">All</option>
+        <option value="ok" data-i18n="hist.ok">OK</option>
+        <option value="review" data-i18n="hist.review">Needs review</option>
+        <option value="error" data-i18n="hist.error">Error</option>
+      </select></div>
+    <button class="btn ghost sm" id="histRefresh" data-i18n="hist.refresh">Refresh</button>
+  </div>
+  <div id="histList"></div>
+</section>
+
+<section class="results" id="results"></section>
+{% endblock %}

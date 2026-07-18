@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block nav_report %}active{% endblock %}
+{% block page_head %}
+<div class="page-header">
+  <h1 data-i18n="page.report.title">Model &amp; Benchmark</h1>
+  <p class="muted" data-i18n="page.report.sub"></p>
+</div>
+{% endblock %}
+{% block content %}
+
+{% if rec %}
+<section class="panel">
+  <div class="rec-banner">
+    <div><span class="muted" data-i18n="rec.model">Recommended model</span><div class="rec-name">{{ rec.recommended }}</div></div>
+    <div class="rec-metric"><span class="muted" data-i18n="rec.fieldacc">Field accuracy</span><br><b>{{ (rec.field_accuracy*100)|round(1) }}%</b></div>
+    <div class="rec-metric"><span class="muted" data-i18n="rec.cost">Cost / 100 pages</span><br><b>${{ rec.cost_per_100 }}</b></div>
+    <div class="rec-crit muted">{{ rec.criterion }}</div>
+  </div>
+</section>
+{% endif %}
+
+{% if compare %}
+<section class="panel">
+  <div class="panel-h"><h3 data-i18n="compare.title">Multi-model comparison</h3><span class="cap" data-i18n="report.readonly">Pre-run benchmark · read-only</span></div>
+  <div class="cmp">
+    {% for m in compare.metrics %}
+    <div class="cmp-metric"><div class="cmp-label">{{ m.label }}</div>
+      {% for r in m.rows %}
+      <div class="cmp-row {% if r.best %}best{% endif %}">
+        <span class="cmp-method">{{ r.method }}</span>
+        <div class="cmp-track"><div class="cmp-fill" style="width:{{ r.pct }}%"></div></div>
+        <span class="cmp-val">{{ r.display }}{% if r.best %} <span class="star">★</span>{% endif %}</span>
+      </div>{% endfor %}
+    </div>{% endfor %}
+  </div>
+</section>
+<section class="panel">
+  <div class="panel-h"><h3 data-i18n="pivot.title">Field accuracy by document type</h3></div>
+  <div class="table-wrap"><table class="data-table heat">
+    <thead><tr><th data-i18n="col.method">Method</th>{% for t in compare.pivot.types %}<th>{{ t }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for row in compare.pivot.rows %}
+      <tr><td>{{ row.method }}</td>
+        {% for c in row.cells %}<td class="num heat-cell" {% if c is not none %}style="--v:{{ c }}"{% endif %}>{% if c is none %}—{% else %}{{ (c*100)|round(0)|int }}%{% endif %}</td>{% endfor %}
+      </tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% else %}
+<section class="panel">
+  <div class="empty-state">
+    <div class="es-icon">📊</div>
+    <h3 data-i18n="report.none">No benchmark results yet — pre-run it once.</h3>
+    <p class="muted" data-i18n="report.runhint">Run the benchmark once with your API key, then this page shows the comparison:</p>
+    <p><code>./scripts/run_benchmark.sh</code></p>
+  </div>
+</section>
+{% endif %}
+
+{% if has_charts %}
+<section class="panel charts">
+  <div><h3 data-i18n="charts.acccost">Accuracy vs cost</h3><img src="/results/accuracy_vs_cost.png"></div>
+  {% if has_robustness %}<div><h3 data-i18n="charts.robust">Robustness</h3><img src="/results/robustness.png"></div>{% endif %}
+</section>
+{% endif %}
+{% if report_md %}<section class="panel"><h3 data-i18n="report.title">Report</h3><pre class="report-md">{{ report_md }}</pre></section>{% endif %}
+{% endblock %}
+{% block scripts %}<script>window.HAVE_KEY = {{ 'true' if have_key else 'false' }};</script>{% endblock %}

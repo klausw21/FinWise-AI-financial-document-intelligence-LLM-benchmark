@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FinWise AI — 智能理财助手</title>
+  <script>document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";</script>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="login-body">
+  <div class="login-top">
+    <button class="icon-btn" id="langBtn" title="Language">中</button>
+    <button class="icon-btn" id="themeBtn" title="Theme">☾</button>
+  </div>
+  <div class="login-wrap">
+    <section class="login-brand">
+      <a class="brand xl"><span class="logo">◈</span> FinWise <b>AI</b></a>
+      <h1 data-i18n="login.tagline">Turn financial PDFs into verified tables and insights.</h1>
+      <ul class="sellers">
+        <li><span>①</span> <span data-i18n="login.sell1">Extract invoices, receipts, bank & card statements to standard JSON.</span></li>
+        <li><span>②</span> <span data-i18n="login.sell2">Field-level confidence, source evidence, and balance reconciliation.</span></li>
+        <li><span>③</span> <span data-i18n="login.sell3">Explainable insights — duplicates, recurring charges, anomalies.</span></li>
+      </ul>
+      <p class="login-trust" data-i18n="login.trust">🔒 Secure processing · data not used for training · demo on synthetic data.</p>
+    </section>
+
+    <section class="login-card">
+      <h2 data-i18n="login.choose">Choose how to continue</h2>
+      <p class="muted" data-i18n="login.demo_note">Demo access — pick a role (no signup).</p>
+      <form method="post" action="/login">
+        <input type="hidden" name="next" value="{{ next }}">
+        <button class="login-role" name="role" value="user" type="submit">
+          <div class="lr-title" data-i18n="login.as_user">Continue as User</div>
+          <div class="lr-desc muted" data-i18n="login.user_desc">Upload or try a sample → extract, verify, get insights, export.</div>
+        </button>
+        <button class="login-role admin" name="role" value="admin" type="submit">
+          <div class="lr-title" data-i18n="login.as_admin">Continue as Admin</div>
+          <div class="lr-desc muted" data-i18n="login.admin_desc">Everything above + models, cost, latency, and the model benchmark.</div>
+        </button>
+      </form>
+      <p class="login-sample muted" data-i18n="login.sample_hint">No file? Built-in sample documents are available inside.</p>
+    </section>
+  </div>
+
+  <script src="/static/i18n.js"></script>
+  <script>
+    (function(){
+      let THEME = localStorage.getItem("theme") || "light";
+      function applyTheme(){ document.documentElement.dataset.theme = THEME; var b=document.getElementById("themeBtn"); if(b) b.textContent = THEME==="dark"?"☀":"☾"; }
+      applyTheme(); applyI18n();
+      document.getElementById("themeBtn").onclick = function(){ THEME = THEME==="dark"?"light":"dark"; localStorage.setItem("theme",THEME); applyTheme(); };
+      document.getElementById("langBtn").onclick = toggleLang;
+    })();
+  </script>
+</body>
+</html>

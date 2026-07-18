@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}FinWise AI — 智能理财助手{% endblock %}</title>
+  <script>document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";</script>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/"><span class="logo">◈</span> FinWise <b>AI</b></a>
+      <nav class="nav-links">
+        <a href="/" class="{% block nav_analyze %}{% endblock %}" data-i18n="nav.analyze">Analyze</a>
+        <a href="/history" class="{% block nav_history %}{% endblock %}" data-i18n="nav.history">History</a>
+        {% if role == 'admin' %}
+        <a href="/report" class="{% block nav_report %}{% endblock %}" data-i18n="nav.report">Model &amp; Benchmark</a>
+        {% endif %}
+      </nav>
+      <div class="nav-right">
+        <span class="key-pill {% if have_key %}on{% endif %}" id="keyStatus"
+              data-i18n="{% if have_key %}key.set{% else %}key.free{% endif %}"></span>
+        <span class="role-chip {{ role }}" data-i18n="role.{{ role or 'user' }}">{{ role or 'user' }}</span>
+        <button class="icon-btn" id="langBtn" title="Language">中</button>
+        <button class="icon-btn" id="themeBtn" title="Theme">☾</button>
+        <button class="btn ghost sm" id="keyBtn" data-i18n="btn.apikey">API Key</button>
+        <a class="icon-btn" href="/logout" title="Logout" data-i18n-title="nav.logout">⎋</a>
+      </div>
+    </div>
+  </header>
+
+  {% block page_head %}{% endblock %}
+  <main class="container">{% block content %}{% endblock %}</main>
+  <footer class="foot" data-i18n="foot.note">Synthetic-data demo · extraction + verification + insights + one-off model benchmark</footer>
+
+  <div class="modal" id="keyModal" hidden>
+    <div class="modal-card">
+      <h3 data-i18n="key.title">Anthropic API key</h3>
+      <p class="muted" data-i18n="key.desc"></p>
+      <input type="password" id="keyInput" placeholder="sk-ant-..." autocomplete="off">
+      <div class="modal-actions">
+        <button class="btn ghost" id="keyCancel" data-i18n="btn.cancel">Cancel</button>
+        <button class="btn primary" id="keySave" data-i18n="btn.save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>window.ROLE = "{{ role or 'user' }}"; window.HAVE_KEY = {{ 'true' if have_key else 'false' }};</script>
+  <script src="/static/i18n.js"></script>
+  <script src="/static/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

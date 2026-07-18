@@ -1,0 +1,19 @@
+# venv / python
+.venv/
+__pycache__/
+*.pyc
+
+# large dataset (regenerate / obtain separately)
+Multi-Document OCR Dataset/
+
+# derived artifacts
+gold/
+data/perturbed/
+benchmark/results/
+report/report.md
+
+# os
+.DS_Store
+
+# local SQLite history (demo)
+finwise.db

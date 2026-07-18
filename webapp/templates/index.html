@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block nav_analyze %}active{% endblock %}
+{% block page_head %}
+<div class="page-header analyze-hero">
+  <h1 data-i18n="page.analyze.title">Financial Document Analyzer</h1>
+  <p class="muted lead" data-i18n="page.analyze.sub"></p>
+</div>
+{% endblock %}
+{% block content %}
+<div class="analyzer">
+  <section class="panel input-card">
+    <div class="seg">
+      <button class="seg-btn active" data-src="upload" data-i18n="seg.upload">Upload</button>
+      <button class="seg-btn" data-src="sample" data-i18n="seg.sample">Sample</button>
+    </div>
+
+    <div class="src-panel" id="uploadPanel">
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg" hidden>
+        <span class="dz-icon">⬆</span>
+        <span class="dz-text" id="fileName" data-i18n="dz.text"></span>
+      </label>
+    </div>
+
+    <div class="src-panel hidden" id="samplePanel">
+      <div class="field"><label data-i18n="field.stype">Type</label>
+        <select id="sampleType">{% for t in types %}<option value="{{t}}">{{t}}</option>{% endfor %}</select></div>
+      <div class="field"><label data-i18n="field.doc">Document</label><select id="sampleDoc"></select></div>
+    </div>
+
+    {% if role == 'admin' %}
+    <div class="field">
+      <label><span data-i18n="field.type">Document type</span> <span class="muted" data-i18n="field.type.hint"></span></label>
+      <select id="docType"><option value="" data-i18n="opt.auto">Auto-detect</option>
+        {% for t in types %}<option value="{{t}}">{{t}}</option>{% endfor %}</select>
+    </div>
+    <div class="field"><label data-i18n="field.model">Model</label>
+      <select id="model">{% for m in methods %}
+        <option value="{{m.id}}" {% if m.id == recommended %}selected{% endif %}>{{m.label}}{% if m.id == recommended %} · recommended{% endif %}</option>
+      {% endfor %}</select></div>
+
+    <label class="checkbox"><input type="checkbox" id="llmCat">
+      <span data-i18n="chk.llmcat">LLM categorization</span> <span class="muted" data-i18n="chk.llmcat.hint"></span></label>
+    <label class="checkbox"><input type="checkbox" id="thinking">
+      <span data-i18n="chk.thinking">Extended thinking</span> <span class="muted" data-i18n="chk.thinking.hint"></span></label>
+    {% else %}
+    <p class="field-hint muted auto-note" data-i18n="analyze.autonote">Type is detected automatically — just upload and analyze.</p>
+    {% endif %}
+
+    <button class="btn primary big" id="analyzeBtn" data-i18n="btn.analyze">Analyze document</button>
+    {% if role == 'admin' %}
+    <div class="session-cost"><span data-i18n="session.spend">Session spend</span> <b id="sessionCost">$0.0000</b></div>
+    {% endif %}
+  </section>
+
+  <section class="results" id="results">
+    <div class="empty-state">
+      <div class="es-icon">🧾</div>
+      <h3 data-i18n="empty.title">Your analysis will appear here</h3>
+      <p class="muted" data-i18n="empty.sub"></p>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script>window.DOC_TYPES = {{ types|tojson }};</script>{% endblock %}
