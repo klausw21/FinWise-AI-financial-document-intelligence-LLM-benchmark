@@ -215,3 +215,39 @@ def advise(doc_type: str, context: str, summary: str, lang: str,
         "cost_usd": _cost(model, u.input_tokens, u.output_tokens),
         "input_tokens": u.input_tokens, "output_tokens": u.output_tokens,
     }
+
+
+_STORY_SYSTEM = (
+    "You are a warm, encouraging personal-finance coach. Using ONLY the pre-computed "
+    "figures provided, write a short motivating note (2-3 sentences, about 50 words) about "
+    "the person's path to financial independence. Never invent, recompute, or add any "
+    "figure not given. If there is no surplus, be kind and focus on the first step. No "
+    "markdown, no lists, no preamble — just the sentences. Respond in {lang}."
+)
+
+
+def story(figures: dict, lang: str, model: str = "claude-haiku-4-5") -> dict:
+    """A motivating 2-3 sentence financial-freedom note grounded in pre-computed figures.
+
+    Only the computed scalars are passed in (never raw rows / extracted data), so the
+    model can phrase the numbers we gave it but physically cannot invent new ones. Cheap
+    by design (short output on Haiku). Returns {text, cost_usd, latency_s, ...} or {error}."""
+    lang_name = "Chinese (简体中文)" if lang == "zh" else "English"
+    system = _STORY_SYSTEM.format(lang=lang_name)
+    user = ("Pre-computed figures (use verbatim, do not change or add any number):\n"
+            + json.dumps(figures, ensure_ascii=False)
+            + "\n\nWrite the motivating note.")
+    kwargs = {"model": model, "max_tokens": 220, "system": system,
+              "messages": [{"role": "user", "content": user}]}
+    t0 = time.perf_counter()
+    try:
+        resp = _get_client().messages.create(**kwargs)
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}", "latency_s": round(time.perf_counter() - t0, 2)}
+    u = resp.usage
+    return {
+        "text": next((b.text for b in resp.content if b.type == "text"), "").strip(),
+        "latency_s": round(time.perf_counter() - t0, 2),
+        "cost_usd": _cost(model, u.input_tokens, u.output_tokens),
+        "input_tokens": u.input_tokens, "output_tokens": u.output_tokens,
+    }

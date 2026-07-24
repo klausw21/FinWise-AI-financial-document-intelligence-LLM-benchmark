@@ -22,6 +22,7 @@ from src import analyze as analyze_mod
 from src import dataset as ds
 from src import detect, insights, methods, present, store
 from src.advice import build_advice
+from src.freedom import build_plan
 from src.extract.base import ExtractResult
 from src.gold.build import gold_for
 
@@ -192,6 +193,7 @@ async def api_analyze(
     mode: str = Form(""),       # user: fast | balanced | accurate
     use_llm_cat: str = Form(""),
     thinking: str = Form(""),
+    freedom: str = Form(""),    # opt-in Financial Freedom Plan (any role)
     lang: str = Form("en"),
 ):
     role = _role(request) or "user"
@@ -260,6 +262,8 @@ async def api_analyze(
     fields, review = present.build_fields(res.data or {}, detected, src_text, a)
     cards = [] if res.error else insights.build_insights(a, res.data or {}, detected, lang, review)
     advice = None if res.error else build_advice(a, res.data or {}, detected, lang, have_key=_have_key())
+    plan = (build_plan(a, res.data or {}, detected, lang, have_key=_have_key())
+            if freedom and not res.error else None)
     conf_mean = (round(sum(_LEVEL_SCORE[f["level"]] for f in fields) / len(fields), 3)
                  if fields else None)
     status = "error" if res.error else ("review" if review else "ok")
@@ -280,6 +284,7 @@ async def api_analyze(
         "error": res.error, "thinking": res.thinking, "notice": notice,
         "data": res.data or {}, "analysis": a,
         "fields": fields, "review": review, "insights": cards, "advice": advice,
+        "freedom": plan,
         "confidence": conf_mean, "needs_review": len(review), "status": status,
     }
     rec_id = store.save({

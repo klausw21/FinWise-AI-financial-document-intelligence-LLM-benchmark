@@ -412,3 +412,94 @@ def test_i18n_key_parity():
     zh = set(re.findall(r'"([\w.]+)":', src.split('zh:')[1]))
     missing = en - zh
     assert not missing, f"zh missing keys: {missing}"
+
+
+# ---------- Financial Freedom Plan ----------
+@pytest.mark.parametrize("lang", ["en", "zh"])
+def test_freedom_plan_rules_without_key(lang):
+    from src.freedom import build_plan
+    d = ds.list_docs("bank_statement")[0]
+    g = gold_for(d)
+    a = analyze_mod.analyze(g, "bank_statement")
+    p = build_plan(a, g, "bank_statement", lang, have_key=False)  # offline, no network
+    assert p["available"] is True and p["income_available"] is True
+    for k in ("baseline", "opportunities", "comparison", "projection", "headline",
+              "story", "disclaimer", "assumptions"):
+        assert k in p, k
+    assert p["story"]["source"] == "rules" and p["story"]["cost_usd"] == 0.0
+    assert p["headline"].strip() and p["disclaimer"].strip()
+    # deterministic / reproducible: same inputs -> identical numbers
+    p2 = build_plan(a, g, "bank_statement", lang, have_key=False)
+    assert p["projection"] == p2["projection"] and p["comparison"] == p2["comparison"]
+
+
+@pytest.mark.parametrize("dt", ["invoice", "receipt"])
+def test_freedom_non_ledger_unavailable(dt):
+    from src.freedom import build_plan
+    d = ds.list_docs(dt)[0]
+    g = gold_for(d)
+    a = analyze_mod.analyze(g, dt)
+    assert build_plan(a, g, dt, "en", have_key=False)["available"] is False
+
+
+def test_freedom_grounded_no_double_count():
+    from src.freedom import build_plan
+    analysis = {
+        "cashflow": {"inflow": 5000.0, "outflow": 3000.0, "net": 2000.0},
+        "category_totals": {"Income": 5000.0, "Dining": 400.0, "Shopping": 200.0},
+        "rows": [  # a recurring subscription (same merchant + amount, 2x)
+            {"description": "Netflix", "amount": 15.99, "category": "Entertainment", "date": "2026-01-02"},
+            {"description": "Netflix", "amount": 15.99, "category": "Entertainment", "date": "2026-01-16"},
+        ],
+    }
+    p = build_plan(analysis, {}, "bank_statement", "en", have_key=False)  # {} -> months=1
+    b = p["baseline"]
+    assert b["income_monthly"] == 5000.0 and b["expenses_monthly"] == 3000.0
+    assert b["net_monthly"] == 2000.0 and b["savings_rate"] == pytest.approx(0.4, abs=0.001)
+    # FI number is grounded on cash-flow outflow, not the category sum
+    assert p["projection"]["fi_number_now"] == pytest.approx(3000.0 * 12 * 25, abs=0.01)
+    # optimized savings only counts category trims (Dining 40% + Shopping 35%), NOT recurring
+    assert p["comparison"]["extra_monthly_savings"] == pytest.approx(400 * 0.40 + 200 * 0.35, abs=0.01)
+    counted_sum = sum(o["monthly_savings"] for o in p["opportunities"] if o["counted"])
+    assert p["comparison"]["extra_monthly_savings"] == pytest.approx(counted_sum, abs=0.01)
+    rec = [o for o in p["opportunities"] if o["type"] == "recurring"]
+    assert rec and all(o["counted"] is False for o in rec)  # surfaced but not double-counted
+
+
+def test_freedom_credit_card_no_income():
+    from src.freedom import build_plan
+    d = ds.list_docs("credit_card_statement")[0]
+    g = gold_for(d)
+    a = analyze_mod.analyze(g, "credit_card_statement")
+    p = build_plan(a, g, "credit_card_statement", "en", have_key=False)
+    assert p["available"] is True and p["income_available"] is False
+    assert p["projection"]["years_now"] is None          # no income -> no timeline
+    assert p["projection"]["fi_number_now"] > 0 and p["opportunities"]
+
+
+def test_webapp_analyze_with_freedom():
+    import os
+    from fastapi.testclient import TestClient
+    from webapp.main import app
+    from src import store
+    os.environ.pop("ANTHROPIC_API_KEY", None)
+    store.clear()
+    c = TestClient(app); c.cookies.set("fw_role", "user")
+    r = c.post("/api/analyze", data={"sample": "bank_statement_0001", "doc_type": "bank_statement",
+                                     "freedom": "1", "lang": "en"}).json()
+    assert r["freedom"] and r["freedom"]["available"] is True
+    assert r["freedom"]["projection"]["fi_number_now"] > 0
+    # history round-trips the plan
+    assert c.get(f"/api/history/{r['id']}").json()["freedom"]["available"] is True
+    # without the flag -> no plan built
+    r2 = c.post("/api/analyze", data={"sample": "bank_statement_0001",
+                                      "doc_type": "bank_statement"}).json()
+    assert r2["freedom"] is None
+    store.clear()
+
+
+def test_freedom_checkbox_visible_to_user():
+    from fastapi.testclient import TestClient
+    from webapp.main import app
+    c = TestClient(app); c.cookies.set("fw_role", "user")
+    assert 'id="freedomPlan"' in c.get("/").text   # opt-in available to all roles, not admin-only

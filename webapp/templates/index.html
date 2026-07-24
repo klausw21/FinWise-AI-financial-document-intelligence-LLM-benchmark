@@ -47,6 +47,10 @@
     <p class="field-hint muted auto-note" data-i18n="analyze.autonote">Type is detected automatically — just upload and analyze.</p>
     {% endif %}
 
+    <label class="checkbox freedom-opt"><input type="checkbox" id="freedomPlan">
+      <span data-i18n="chk.freedom">🚀 Financial Freedom Plan</span>
+      <span class="muted" data-i18n="chk.freedom.hint"></span></label>
+
     <button class="btn primary big" id="analyzeBtn" data-i18n="btn.analyze">Analyze document</button>
     {% if role == 'admin' %}
     <div class="session-cost"><span data-i18n="session.spend">Session spend</span> <b id="sessionCost">$0.0000</b></div>

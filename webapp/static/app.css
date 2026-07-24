@@ -271,3 +271,39 @@ pre.think{background:var(--brand-soft);color:var(--ink);border:1px solid var(--l
 .hist-act{display:flex;gap:6px;justify-content:flex-end}
 .btn.xs{padding:4px 10px;font-size:12px;border-radius:8px}
 .btn.danger{color:var(--red)}.btn.danger:hover{border-color:var(--red);background:var(--red-soft)}
+
+/* ---------- Financial Freedom Plan ---------- */
+.rcard.freedom-card{background:linear-gradient(160deg,var(--brand-soft),var(--surface) 62%);border-color:var(--brand);border-left:4px solid var(--brand)}
+.rcard.freedom-card h3{color:var(--brand-ink)}
+.freedom-hero{margin-bottom:12px}
+.freedom-hero .fh-badge{display:inline-block;background:var(--grad);color:#fff;font-weight:700;font-size:15px;padding:8px 15px;border-radius:999px;box-shadow:var(--shadow-lg)}
+.freedom-story{margin:0 0 16px;font-size:14.5px;line-height:1.6;color:var(--ink);font-weight:500}
+.freedom-tiles{margin-bottom:6px}
+.freedom-note{font-size:12px;margin:2px 0 4px}
+.rcard-sub{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 15px;margin:12px 0;box-shadow:var(--shadow-sm)}
+.rcard-sub h4{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.cf-fill.cur{background:var(--muted)}
+.freedom-surplus-row{margin-top:11px;font-size:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;font-variant-numeric:tabular-nums}
+.freedom-card .pos{color:var(--green)}
+.fi-curve{display:block;width:100%;aspect-ratio:320/160;height:auto;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;margin-bottom:9px}
+.fi-curve .fi-now{stroke:var(--muted);stroke-width:2}
+.fi-curve .fi-opt{stroke:var(--green);stroke-width:2.5}
+.fi-curve .fi-target{stroke:var(--brand);stroke-width:1;stroke-dasharray:4 4;opacity:.65}
+.fi-curve .fi-mark{stroke-width:1;stroke-dasharray:2 3}
+.fi-curve .fi-mark.now{stroke:var(--muted)}.fi-curve .fi-mark.opt{stroke:var(--green)}
+.fi-legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted)}
+.fi-legend .fi-leg{display:inline-flex;align-items:center;gap:5px}
+.fi-legend .fi-leg::before{content:"";width:11px;height:3px;border-radius:2px;display:inline-block}
+.fi-legend .fi-leg.now::before{background:var(--muted)}
+.fi-legend .fi-leg.opt::before{background:var(--green)}
+.fi-legend .fi-leg.tgt::before{background:var(--brand)}
+.fi-legend b{color:var(--ink);font-variant-numeric:tabular-nums}
+.freedom-opps td.num.pos{color:var(--green);font-weight:600}
+.freedom-opps .opp-subhead td{background:var(--surface-2);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.freedom-opps .opp-ev{width:1%;white-space:nowrap}
+.freedom-opps details.ins-ev summary{cursor:pointer;color:var(--brand-ink);font-size:12px}
+.freedom-opps details.ins-ev ul{margin:6px 0 0;padding-left:16px;color:var(--muted);font-size:12px;line-height:1.5}
+.freedom-assume{margin-top:12px;font-size:12px;color:var(--muted)}
+.freedom-assume summary{cursor:pointer}
+.freedom-assume ul{margin:6px 0 0;padding-left:18px;line-height:1.5}
+.freedom-disclaimer{margin:10px 0 0;font-size:11px;line-height:1.5}

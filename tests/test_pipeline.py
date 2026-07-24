@@ -124,3 +124,39 @@ def test_degraded_score_drops():
     assert s["fields"]["field_accuracy"] < 1.0
     assert s["list"]["recall"] < 1.0
     assert s["reconciles"] is False
+
+
+# ---------- financial-freedom math (deterministic, key-free) ----------
+def test_years_to_fi_closed_form():
+    import math
+    from src.freedom import _years_to_fi
+    # expenses 3000/mo -> FI = 900k; save 2000/mo (24k/yr) at 5% real
+    n = _years_to_fi(900_000, 24_000, 0.05, 0.0)
+    expect = math.log((900_000 + 24_000 / 0.05) / (24_000 / 0.05)) / math.log(1.05)
+    assert n == pytest.approx(round(min(expect, 100.0), 1), abs=0.05)
+    # monotonic: more savings -> fewer years; higher return -> fewer years
+    assert _years_to_fi(900_000, 36_000, 0.05, 0.0) < n
+    assert _years_to_fi(900_000, 24_000, 0.08, 0.0) < n
+    # starting assets shorten the path
+    assert _years_to_fi(900_000, 24_000, 0.05, 200_000) < n
+
+
+def test_years_to_fi_edges():
+    from src.freedom import _years_to_fi
+    assert _years_to_fi(900_000, 0, 0.05, 0.0) is None        # not saving -> unreachable
+    assert _years_to_fi(900_000, -100, 0.05, 0.0) is None
+    assert _years_to_fi(0, 24_000, 0.05, 0.0) == 0.0          # no expenses -> already free
+    assert _years_to_fi(900_000, 24_000, 0.05, 900_000) == 0.0  # already at FI
+    # zero/negative return -> linear fallback (no log blow-up)
+    assert _years_to_fi(900_000, 90_000, 0.0, 0.0) == pytest.approx(10.0, abs=0.05)
+
+
+def test_period_months_derivation():
+    from src.freedom import _period_months
+    m, derived = _period_months({"period_start": "2026-01-01", "period_end": "2026-02-01"},
+                                "bank_statement")
+    assert derived is True and m == pytest.approx(1.0, abs=0.05)
+    # missing / reversed -> assume one month, not derived
+    assert _period_months({}, "bank_statement") == (1.0, False)
+    assert _period_months({"period_start": "2026-02-01", "period_end": "2026-01-01"},
+                          "bank_statement") == (1.0, False)

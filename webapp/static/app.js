@@ -85,6 +85,7 @@ async function analyze(overrideType){
     if($("llmCat")?.checked) fd.append("use_llm_cat","1");
     if($("thinking")?.checked) fd.append("thinking","1");
   }
+  if($("freedomPlan")?.checked) fd.append("freedom","1");   // opt-in, all roles
   fd.append("lang",LANG);
   btn.disabled=true; btn.innerHTML=`<span class="spinner"></span> ${esc(t("analyzing"))}`;
   showLoading();
@@ -94,7 +95,8 @@ async function analyze(overrideType){
     state.chat=[]; state.ctx=JSON.stringify(res.data||{});
     render(res);
     if(admin() && $("sessionCost")){
-      state.sessionCost += (res.cost_usd||0) + ((res.advice&&res.advice.cost_usd)||0);
+      state.sessionCost += (res.cost_usd||0) + ((res.advice&&res.advice.cost_usd)||0)
+        + ((res.freedom&&res.freedom.story&&res.freedom.story.cost_usd)||0);
       $("sessionCost").textContent="$"+state.sessionCost.toFixed(4);
     }
   }catch(e){ stopLoading(); $("results").innerHTML = stateCard("err","⚠",t("err.title"),esc(e)); }
@@ -151,6 +153,7 @@ function render(res){
   if(res.needs_review>0) html+=`<div class="rcard review-banner"><span class="badge warn">⚑ ${res.needs_review}</span> ${t("review.banner")}${(res.review||[]).length?`: <b>${(res.review||[]).map(esc).join(", ")}</b>`:""}</div>`;
   html+=adviceCard(res);
   html+=insightCards(res);
+  html+=freedomCard(res);
   html+=fieldsCard(res, a);
 
   const rows=a.rows||[];
@@ -248,6 +251,108 @@ function insightCards(res){
 function adviceCard(res){
   const adv=res.advice; if(!adv||!adv.text) return "";
   return `<div class="rcard advice"><h3>💡 ${t("sec.advice")}</h3><p class="advice-text">${esc(adv.text)}</p></div>`;
+}
+
+/* ---------- Financial Freedom Plan (static before/after · no sliders) ---------- */
+function freedomCard(res){
+  const p=res.freedom; if(!p) return "";
+  if(p.available===false){
+    return `<div class="rcard freedom-card"><h3>🚀 ${t("sec.freedom")}</h3>
+      <div class="empty-state" style="padding:22px"><div class="es-icon">🏦</div>
+      <p class="muted">${t("freedom.needledger")}</p></div></div>`;
+  }
+  if(p.insufficient){
+    return `<div class="rcard freedom-card"><h3>🚀 ${t("sec.freedom")}</h3><p class="muted">${esc(p.note||"")}</p></div>`;
+  }
+  let h=`<div class="rcard freedom-card"><h3>🚀 ${t("sec.freedom")}</h3>`;
+  h+=`<div class="freedom-hero"><span class="fh-badge">${esc(p.headline)}</span></div>`;
+  if(p.story&&p.story.text) h+=`<p class="freedom-story">${esc(p.story.text)}</p>`;
+  h+=freedomBaseline(p.baseline);
+  h+=`<div class="freedom-note muted">↔ ${t("freedom.optnote")}</div>`;
+  h+=freedomBars(p.comparison);
+  h+=fiCurve(p);
+  h+=freedomOpps(p.opportunities);
+  h+=`<details class="freedom-assume"><summary>${t("freedom.assumptions")}</summary>
+    <ul>${(p.assumptions.notes||[]).map(n=>`<li>${esc(n)}</li>`).join("")}</ul></details>`;
+  h+=`<p class="freedom-disclaimer muted">⚠ ${esc(p.disclaimer)}</p>`;
+  return h+`</div>`;
+}
+function freedomBaseline(b){
+  let tiles="";
+  if(b.income_monthly!=null) tiles+=tile(t("freedom.income"), "$"+money(b.income_monthly));
+  tiles+=tile(t("freedom.expenses"), "$"+money(b.expenses_monthly));
+  if(b.net_monthly!=null) tiles+=tile(t("freedom.net"), "$"+money(b.net_monthly));
+  if(b.savings_rate!=null) tiles+=tile(t("freedom.savingsrate"), Math.round(b.savings_rate*100)+"%");
+  return `<div class="tiles freedom-tiles">${tiles}</div>`;
+}
+function freedomBars(cmp){
+  const cur=cmp.current, opt=cmp.optimized;
+  if(cur.savings_rate!=null && opt.savings_rate!=null){
+    const bar=(label,rate,cls)=>{ const pct=Math.max(0,Math.min(100,rate*100));
+      return `<div class="cf-row"><span class="muted">${label}</span>
+        <div class="cf-track"><div class="cf-fill ${cls}" style="width:${pct}%"></div></div>
+        <span class="cf-val">${Math.round(rate*100)}%</span></div>`; };
+    return `<div class="rcard-sub"><h4>${t("freedom.comparison")}</h4><div class="cf freedom-cf">
+      ${bar(t("freedom.current"),cur.savings_rate,"cur")}
+      ${bar(t("freedom.optimized"),opt.savings_rate,"in")}</div>
+      <div class="freedom-surplus-row"><span class="muted">${t("freedom.surplus")}</span>
+        <b>$${money(cur.monthly_surplus)}</b> → <b class="pos">$${money(opt.monthly_surplus)}</b>
+        <span class="muted">(+$${money(cmp.extra_monthly_savings)}/mo)</span></div></div>`;
+  }
+  return `<div class="rcard-sub"><h4>${t("freedom.comparison")}</h4>
+    <div class="freedom-surplus-row"><span class="muted">${t("freedom.opp.savings")}</span>
+      <b class="pos">+$${money(cmp.extra_monthly_savings)}</b> <span class="muted">/mo</span></div></div>`;
+}
+function fiCurve(p){
+  const proj=p.projection;
+  // no income timeline (credit card / unreachable) -> compare freedom numbers as two bars
+  if(proj.years_now==null){
+    const mx=Math.max(proj.fi_number_now,proj.fi_number_opt,1);
+    const bar=(label,v,cls)=>`<div class="cf-row"><span class="muted">${label}</span>
+      <div class="cf-track"><div class="cf-fill ${cls}" style="width:${Math.max(4,v/mx*100)}%"></div></div>
+      <span class="cf-val">$${money(v)}</span></div>`;
+    return `<div class="rcard-sub"><h4>${t("freedom.finumber")}</h4><div class="cf">
+      ${bar(t("freedom.current"),proj.fi_number_now,"out")}
+      ${bar(t("freedom.optimized"),proj.fi_number_opt,"in")}</div></div>`;
+  }
+  const r=p.assumptions.real_return, S0=p.assumptions.starting_assets||0;
+  const Pnow=(p.baseline.net_monthly||0)*12, Popt=(p.comparison.optimized.monthly_surplus||0)*12;
+  const fv=(P,tt)=> r>0 ? S0*Math.pow(1+r,tt)+P*(Math.pow(1+r,tt)-1)/r : S0+P*tt;
+  const W=320,H=160,padL=8,padR=8,padT=10,padB=18;
+  const xmax=Math.max(proj.years_now,proj.years_opt,1);
+  const ymax=Math.max(proj.fi_number_now, fv(Popt,proj.years_opt), 1);
+  const X=tt=>padL+(tt/xmax)*(W-padL-padR), Y=v=>H-padB-(Math.min(v,ymax)/ymax)*(H-padT-padB);
+  const line=(P,end,cls)=>{ let pts=[]; const N=40;
+    for(let i=0;i<=N;i++){ const tt=end*i/N; pts.push(X(tt).toFixed(1)+","+Y(fv(P,tt)).toFixed(1)); }
+    return `<polyline class="${cls}" vector-effect="non-scaling-stroke" fill="none" points="${pts.join(" ")}"/>`; };
+  const mark=(tv,cls)=>`<line class="fi-mark ${cls}" vector-effect="non-scaling-stroke" x1="${X(tv).toFixed(1)}" y1="${padT}" x2="${X(tv).toFixed(1)}" y2="${H-padB}"/>`;
+  const fiY=Y(proj.fi_number_now).toFixed(1);
+  return `<div class="rcard-sub"><h4>${t("freedom.projection")}</h4>
+    <svg class="fi-curve" viewBox="0 0 ${W} ${H}" width="100%">
+      <line class="fi-target" vector-effect="non-scaling-stroke" x1="${padL}" y1="${fiY}" x2="${W-padR}" y2="${fiY}"/>
+      ${line(Pnow,proj.years_now,"fi-now")}${line(Popt,proj.years_opt,"fi-opt")}
+      ${mark(proj.years_now,"now")}${mark(proj.years_opt,"opt")}</svg>
+    <div class="fi-legend">
+      <span class="fi-leg now">${t("freedom.yearsnow")}: <b>${proj.years_now} ${t("freedom.years")}</b></span>
+      <span class="fi-leg opt">${t("freedom.yearsopt")}: <b>${proj.years_opt} ${t("freedom.years")}</b></span>
+      <span class="fi-leg tgt">${t("freedom.finumber")}: <b>$${money(proj.fi_number_now)}</b></span></div></div>`;
+}
+function freedomOpps(opps){
+  if(!opps||!opps.length) return "";
+  const counted=opps.filter(o=>o.counted), also=opps.filter(o=>!o.counted);
+  const row=(o)=>`<tr>
+    <td>${chip(o.category)}</td>
+    <td class="num">$${money(o.current_monthly)}</td>
+    <td class="num">${o.trim_pct!=null?Math.round(o.trim_pct*100)+"%":"—"}</td>
+    <td class="num pos">$${money(o.monthly_savings)}</td>
+    <td class="opp-ev">${(o.evidence&&o.evidence.length)?`<details class="ins-ev"><summary>${t("freedom.opp.evidence")}</summary><ul>${o.evidence.map(e=>`<li>${esc(e)}</li>`).join("")}</ul></details>`:""}</td></tr>`;
+  let body=counted.map(row).join("");
+  if(also.length){ body+=`<tr class="opp-subhead"><td colspan="5">${t("freedom.recurring")}</td></tr>`+also.map(row).join(""); }
+  return `<div class="rcard-sub"><h4>${t("freedom.opportunities")}</h4>
+    <div class="table-wrap"><table class="data-table freedom-opps">
+    <thead><tr><th>${t("freedom.opp.category")}</th><th class="num">${t("freedom.opp.current")}</th>
+    <th class="num">${t("freedom.opp.trim")}</th><th class="num">${t("freedom.opp.savings")}</th><th></th></tr></thead>
+    <tbody>${body}</tbody></table></div></div>`;
 }
 function listTitle(dt){ const m={bank_statement:["Transactions","交易明细"],credit_card_statement:["Transactions","交易明细"],invoice:["Line Items","行项目"],receipt:["Line Items","行项目"]}[dt]; return m?(LANG==="zh"?m[1]:m[0]):(state.last?.analysis?.list_field||"rows"); }
 
