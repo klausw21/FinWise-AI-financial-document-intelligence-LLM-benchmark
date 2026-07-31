@@ -64,15 +64,40 @@ def _parse_date(s) -> Optional[datetime]:
         return None
 
 
-def _period_months(data: dict, doc_type: str) -> tuple[float, bool]:
-    """(months, derived). Derive from period_start/period_end when both parse and
-    end > start; otherwise assume the statement covers one month."""
+def _months_from_rows(rows: list[dict]) -> Optional[float]:
+    """Months covered, inferred from the transaction dates themselves — robust when
+    period_start/period_end are missing or describe only one of several months."""
+    dates = sorted(d for d in (_parse_date(r.get("date")) for r in (rows or [])) if d)
+    if len(dates) < 2:
+        return None
+    span = (dates[-1] - dates[0]).days / _DAYS_PER_MONTH
+    distinct = len({(d.year, d.month) for d in dates})
+    # a multi-month report: trust the distinct calendar-month count, but only when the
+    # span really covers it (guards a few days straddling a month boundary)
+    if distinct >= 2 and span >= 1.0:
+        return float(distinct)
+    return round(max(span, _MONTHS_FLOOR), 3)
+
+
+def _period_months(data: dict, rows: list[dict], doc_type: str) -> tuple[float, bool, bool]:
+    """(months, derived, multi_month). Prefer period_start/period_end, but cross-check
+    against the transaction dates: when the rows span materially more than the stated
+    period (or the period is missing), trust the rows — so a multi-month report is never
+    collapsed into one month (which would inflate the monthly figures)."""
+    from_rows = _months_from_rows(rows)
     start = _parse_date(data.get("period_start"))
     end = _parse_date(data.get("period_end"))
+    period_months = None
     if start and end and end > start:
-        months = (end - start).days / _DAYS_PER_MONTH
-        return round(max(months, _MONTHS_FLOOR), 3), True
-    return 1.0, False
+        period_months = round(max((end - start).days / _DAYS_PER_MONTH, _MONTHS_FLOOR), 3)
+
+    if from_rows is not None and (period_months is None or from_rows >= 1.5 * period_months):
+        months, derived = from_rows, True          # rows span more than stated -> trust rows
+    elif period_months is not None:
+        months, derived = period_months, True
+    else:
+        months, derived = 1.0, False
+    return months, derived, months >= 1.5
 
 
 # ---------------- baseline ----------------
@@ -264,13 +289,16 @@ def financial_story(baseline: dict, comparison: dict, projection: dict,
             f"the first step toward turning the corner.")
 
 
-def _assumptions(months: float, derived: bool, real_return: float, starting_assets: float,
-                 doc_type: str, lang: str) -> dict:
+def _assumptions(months: float, derived: bool, multi_month: bool, real_return: float,
+                 starting_assets: float, doc_type: str, lang: str) -> dict:
     zh = lang == "zh"
     notes = []
     if not derived:
         notes.append("已按账单覆盖约 1 个月估算(未能从账单推断周期)。" if zh else
                      "Assumed the statement covers about one month (period not derivable).")
+    elif multi_month:
+        notes.append((f"已识别账单覆盖约 {months:.0f} 个月,所有数值均已折算为「平均每月」。" if zh else
+                      f"Detected a ~{months:.0f}-month span; all figures are shown as a monthly average."))
     else:
         notes.append((f"已按账单周期约 {months:.1f} 个月折算为月度数值。" if zh else
                       f"Annualized from the ~{months:.1f}-month statement period."))
@@ -281,8 +309,9 @@ def _assumptions(months: float, derived: bool, real_return: float, starting_asse
     if doc_type == "credit_card_statement":
         notes.append(("信用卡账单只含支出;收入与时间线需要一份银行账单。" if zh else
                       "A credit-card statement shows spending only; income and a timeline need a bank statement."))
-    return {"months": months, "period_derived": derived, "real_return": real_return,
-            "fi_multiple": FI_MULTIPLE, "starting_assets": starting_assets, "notes": notes}
+    return {"months": months, "period_derived": derived, "multi_month": multi_month,
+            "real_return": real_return, "fi_multiple": FI_MULTIPLE,
+            "starting_assets": starting_assets, "notes": notes}
 
 
 def _disclaimer(lang: str) -> str:
@@ -303,14 +332,14 @@ def build_plan(analysis: dict, data: dict, doc_type: str, lang: str = "en",
     if doc_type not in _LEDGER:
         return {"available": False, "doc_type": doc_type}
 
-    months, derived = _period_months(data, doc_type)
-    baseline = _baseline(analysis, doc_type, months)
     rows = analysis.get("rows") or []
+    months, derived, multi_month = _period_months(data, rows, doc_type)
+    baseline = _baseline(analysis, doc_type, months)
 
     # not enough to plan on (empty / zero-spend statement)
     if baseline["expenses_monthly"] <= 0 and not baseline["expenses_by_category"]:
         return {"available": True, "insufficient": True, "doc_type": doc_type,
-                "assumptions": _assumptions(months, derived, real_return, starting_assets, doc_type, lang),
+                "assumptions": _assumptions(months, derived, multi_month, real_return, starting_assets, doc_type, lang),
                 "note": ("交易数据不足,无法生成规划。" if lang == "zh" else
                          "Not enough transaction data to build a plan.")}
 
@@ -373,7 +402,7 @@ def build_plan(analysis: dict, data: dict, doc_type: str, lang: str = "en",
     return {
         "available": True, "doc_type": doc_type,
         "income_available": doc_type == "bank_statement" and baseline["income_monthly"] is not None,
-        "assumptions": _assumptions(months, derived, real_return, starting_assets, doc_type, lang),
+        "assumptions": _assumptions(months, derived, multi_month, real_return, starting_assets, doc_type, lang),
         "baseline": baseline, "opportunities": opportunities,
         "comparison": comparison, "projection": projection,
         "headline": headline, "story": story, "disclaimer": _disclaimer(lang),
@@ -397,3 +426,27 @@ if __name__ == "__main__":
           plan["projection"]["years_opt"], plan["projection"]["years_saved"])
     print("headline:", plan["headline"])
     print("story:", plan["story"]["text"])
+
+    # ---- synthetic multi-month regression (no dataset / no key needed) ----
+    print("\n--- multi-month synthetic check ---")
+    syn_rows = [
+        {"date": "2026-01-05", "description": "Diner",  "debit": 100, "category": "Dining"},
+        {"date": "2026-01-20", "description": "Store",  "debit": 100, "category": "Shopping"},
+        {"date": "2026-02-05", "description": "Diner",  "debit": 100, "category": "Dining"},
+        {"date": "2026-02-20", "description": "Store",  "debit": 100, "category": "Shopping"},
+        {"date": "2026-03-05", "description": "Diner",  "debit": 100, "category": "Dining"},
+        {"date": "2026-03-20", "description": "Store",  "debit": 100, "category": "Shopping"},
+    ]
+    syn_analysis = {
+        "rows": syn_rows,
+        "cashflow": {"inflow": 900.0, "outflow": 600.0, "net": 300.0},
+        "category_totals": {"Dining": 300.0, "Shopping": 300.0},
+    }
+    syn_data = {"period_start": None, "period_end": None, "transaction_rows": syn_rows}
+    m, drv, mm = _period_months(syn_data, syn_rows, "bank_statement")
+    syn_plan = build_plan(syn_analysis, syn_data, "bank_statement", "en", have_key=False)
+    exp_m = syn_plan["baseline"]["expenses_monthly"]
+    print(f"months={m} derived={drv} multi_month={mm}  expenses_monthly={exp_m}")
+    assert abs(m - 3.0) < 0.01 and mm is True, "expected 3-month span detected from rows"
+    assert abs(exp_m - 200.0) < 0.01, "expected 600 outflow / 3 months = 200/mo (was 600 pre-fix)"
+    print("PASS: 3-month report averaged to $200/mo (pre-fix would show $600/mo)")

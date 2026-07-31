@@ -141,6 +141,8 @@ def extract_vision(doc_type, image_path, model: str, stem: str,
     if len(paths) > 1:
         instr += (f" This document has {len(paths)} pages shown above in order; read ALL of them and "
                   "combine — transactions and totals often span multiple pages.")
+    instr += (" If the document spans multiple months or statement periods, keep each transaction row's "
+              "date with its own correct month and year (do not collapse different months together).")
     content.append({"type": "text", "text": instr})
     return _call(doc_type, model, content, stem, method, thinking=thinking)
 

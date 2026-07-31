@@ -118,6 +118,11 @@ function confBadge(level){
   return `<span class="conf ${level}" title="${esc(lab)}"><span class="conf-dot"></span>${esc(lab)}</span>`;
 }
 function modeLabel(res){ return admin() ? esc(res.model_label||res.model) : t("mode."+(res.mode||"balanced")); }
+/* wrap a group of cards into a titled board; hidden when it has no content */
+function board(titleKey, icon, inner){
+  return (inner && inner.trim())
+    ? `<section class="board"><div class="board-head"><h2>${icon} ${t(titleKey)}</h2></div>${inner}</section>` : "";
+}
 
 function render(res){
   state.last=res;
@@ -142,35 +147,37 @@ function render(res){
   }
   if(isLedger) tiles += tile(t("tile.reconcile"), rec?`<span class="badge ok">${t("badge.balanced")}</span>`:`<span class="badge bad">${t("badge.off")}</span>`);
 
-  let html=`<div class="tiles">${tiles}</div>`;
-  if(res.reference) html+=`<div class="rcard ref-badge">📄 ${t("badge.reference")}</div>`;
-  html+=detectFixBar(res);
-  html+=(res.notice||[]).map(n=>`<div class="rcard notice-banner">ℹ️ ${esc(n)}</div>`).join("");
+  // ---------- board 1: document analysis ----------
+  let aHtml=`<div class="tiles">${tiles}</div>`;
+  if(res.reference) aHtml+=`<div class="rcard ref-badge">📄 ${t("badge.reference")}</div>`;
+  aHtml+=detectFixBar(res);
+  aHtml+=(res.notice||[]).map(n=>`<div class="rcard notice-banner">ℹ️ ${esc(n)}</div>`).join("");
 
-  if(res.error){ html+=stateCard("err","⚠",t("err.extract.t"),errorMsg(res.error)); $("results").innerHTML=html; return; }
+  if(res.error){ aHtml+=stateCard("err","⚠",t("err.extract.t"),errorMsg(res.error)); $("results").innerHTML=board("board.analysis","🗂",aHtml); return; }
 
-  html+=`<div class="export-bar"><button class="btn ghost sm" id="expJson">⬇ ${t("export.json")}</button><button class="btn ghost sm" id="expCsv">⬇ ${t("export.csv")}</button></div>`;
-  if(res.needs_review>0) html+=`<div class="rcard review-banner"><span class="badge warn">⚑ ${res.needs_review}</span> ${t("review.banner")}${(res.review||[]).length?`: <b>${(res.review||[]).map(esc).join(", ")}</b>`:""}</div>`;
-  html+=adviceCard(res);
-  html+=insightCards(res);
-  html+=freedomCard(res);
-  html+=fieldsCard(res, a);
+  aHtml+=`<div class="export-bar"><button class="btn ghost sm" id="expJson">⬇ ${t("export.json")}</button><button class="btn ghost sm" id="expCsv">⬇ ${t("export.csv")}</button></div>`;
+  if(res.needs_review>0) aHtml+=`<div class="rcard review-banner"><span class="badge warn">⚑ ${res.needs_review}</span> ${t("review.banner")}${(res.review||[]).length?`: <b>${(res.review||[]).map(esc).join(", ")}</b>`:""}</div>`;
+  aHtml+=fieldsCard(res, a);
+  aHtml+=insightCards(res);
 
   const rows=a.rows||[];
-  if(rows.length) html+=`<div class="rcard"><h3>${listTitle(res.doc_type)} · ${rows.length}</h3>${rowsTable(rows)}</div>`;
+  if(rows.length) aHtml+=`<div class="rcard"><h3>${listTitle(res.doc_type)} · ${rows.length}</h3>${rowsTable(rows)}</div>`;
 
   if(isLedger && a.cashflow && Object.keys(a.cashflow).length){
-    html+=`<div class="rcard"><h3>${t("sec.cashflow")}</h3><div class="cf-donut"><div>${cashflow(a.cashflow)}${catBreak(a.category_totals||{})}</div>${donut(a.category_totals||{})}</div></div>`;
+    aHtml+=`<div class="rcard"><h3>${t("sec.cashflow")}</h3><div class="cf-donut"><div>${cashflow(a.cashflow)}${catBreak(a.category_totals||{})}</div>${donut(a.category_totals||{})}</div></div>`;
   } else if(Object.keys(a.category_totals||{}).length){
-    html+=`<div class="rcard"><h3>${t("sec.categories")}</h3><div class="cf-donut"><div>${catBreak(a.category_totals)}</div>${donut(a.category_totals)}</div></div>`;
+    aHtml+=`<div class="rcard"><h3>${t("sec.categories")}</h3><div class="cf-donut"><div>${catBreak(a.category_totals)}</div>${donut(a.category_totals)}</div></div>`;
   }
 
   if(admin()){
-    if(res.thinking) html+=`<div class="rcard"><details class="think" open><summary>${t("thinking.summary")}</summary><pre class="think">${esc(res.thinking)}</pre></details></div>`;
-    html+=`<div class="rcard"><details class="raw"><summary>${t("raw.json")}</summary><pre class="json">${esc(JSON.stringify(res.data,null,2))}</pre></details></div>`;
+    if(res.thinking) aHtml+=`<div class="rcard"><details class="think" open><summary>${t("thinking.summary")}</summary><pre class="think">${esc(res.thinking)}</pre></details></div>`;
+    aHtml+=`<div class="rcard"><details class="raw"><summary>${t("raw.json")}</summary><pre class="json">${esc(JSON.stringify(res.data,null,2))}</pre></details></div>`;
   }
-  html+=chatPanel();
-  $("results").innerHTML=html;
+
+  // ---------- board 2: financial planning ----------
+  const pHtml=adviceCard(res)+freedomCard(res);
+
+  $("results").innerHTML = board("board.analysis","🗂",aHtml) + board("board.planning","🚀",pHtml) + chatPanel();
   wireChat(); wireExport(res);
 }
 
@@ -265,6 +272,8 @@ function freedomCard(res){
     return `<div class="rcard freedom-card"><h3>🚀 ${t("sec.freedom")}</h3><p class="muted">${esc(p.note||"")}</p></div>`;
   }
   let h=`<div class="rcard freedom-card"><h3>🚀 ${t("sec.freedom")}</h3>`;
+  const asm=p.assumptions||{};
+  if(asm.multi_month) h+=`<div class="freedom-multimonth">📅 ${esc(t("freedom.multimonth").replace("{n}", Math.round(asm.months||0)))}</div>`;
   h+=`<div class="freedom-hero"><span class="fh-badge">${esc(p.headline)}</span></div>`;
   if(p.story&&p.story.text) h+=`<p class="freedom-story">${esc(p.story.text)}</p>`;
   h+=freedomBaseline(p.baseline);
