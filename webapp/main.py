@@ -95,6 +95,16 @@ def _method_to_mode(method: str) -> str:
     return {v: k for k, v in MODE_MAP.items()}.get(method, "balanced")
 
 
+def _opt_num(s: str) -> float | None:
+    """Parse an optional numeric form field -> a non-negative float, or None if the
+    field is blank / not a valid positive number (freedom-plan inputs are all optional)."""
+    try:
+        v = float(str(s).strip())
+    except (TypeError, ValueError):
+        return None
+    return v if v >= 0 else None
+
+
 # ---------------- login / onboarding ----------------
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, next: str = "/"):
@@ -194,6 +204,9 @@ async def api_analyze(
     use_llm_cat: str = Form(""),
     thinking: str = Form(""),
     freedom: str = Form(""),    # opt-in Financial Freedom Plan (any role)
+    income_monthly: str = Form(""),   # optional freedom-plan inputs (blank -> defaults)
+    starting_assets: str = Form(""),
+    fixed_costs: str = Form(""),
     lang: str = Form("en"),
 ):
     role = _role(request) or "user"
@@ -262,7 +275,9 @@ async def api_analyze(
     fields, review = present.build_fields(res.data or {}, detected, src_text, a)
     cards = [] if res.error else insights.build_insights(a, res.data or {}, detected, lang, review)
     advice = None if res.error else build_advice(a, res.data or {}, detected, lang, have_key=_have_key())
-    plan = (build_plan(a, res.data or {}, detected, lang, have_key=_have_key())
+    plan = (build_plan(a, res.data or {}, detected, lang, have_key=_have_key(),
+                       starting_assets=_opt_num(starting_assets) or 0.0,
+                       user_income=_opt_num(income_monthly), fixed_costs=_opt_num(fixed_costs))
             if freedom and not res.error else None)
     conf_mean = (round(sum(_LEVEL_SCORE[f["level"]] for f in fields) / len(fields), 3)
                  if fields else None)

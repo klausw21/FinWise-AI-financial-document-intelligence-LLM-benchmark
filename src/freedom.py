@@ -105,8 +105,11 @@ def _category_rows(rows: list[dict], category: str) -> list[dict]:
     return [r for r in rows if r.get("category") == category]
 
 
-def _baseline(analysis: dict, doc_type: str, months: float) -> dict:
-    """Monthly income / expenses / net / savings-rate + per-category expense breakdown."""
+def _baseline(analysis: dict, doc_type: str, months: float,
+              income_override: Optional[float] = None) -> dict:
+    """Monthly income / expenses / net / savings-rate + per-category expense breakdown.
+    A user-supplied income_override wins for any doc type — it corrects a misread bank
+    income and, for a credit-card statement (spending-only), unlocks a full timeline."""
     cf = analysis.get("cashflow") or {}
     cats = analysis.get("category_totals") or {}
     outflow = cf.get("outflow") or 0
@@ -114,7 +117,11 @@ def _baseline(analysis: dict, doc_type: str, months: float) -> dict:
     net = cf.get("net")
 
     expenses_monthly = round(outflow / months, 2)
-    if doc_type == "bank_statement":
+    if income_override is not None:
+        income_monthly = round(income_override, 2)
+        net_monthly = round(income_monthly - expenses_monthly, 2)
+        savings_rate = round(net_monthly / income_monthly, 4) if income_monthly > 0 else None
+    elif doc_type == "bank_statement":
         income_monthly = round(inflow / months, 2)
         net_monthly = round((net if net is not None else inflow - outflow) / months, 2)
         savings_rate = round(net_monthly / income_monthly, 4) if income_monthly > 0 else None
@@ -216,13 +223,13 @@ def _projection(baseline: dict, extra_monthly: float, doc_type: str,
     fi_now = round(annual_expenses_now * FI_MULTIPLE, 2)
     fi_opt = round(annual_expenses_opt * FI_MULTIPLE, 2)
 
-    if doc_type == "bank_statement" and baseline["net_monthly"] is not None:
+    if baseline["net_monthly"] is not None:   # income known (bank, or user-supplied for a card)
         net_m = baseline["net_monthly"]
         years_now = _years_to_fi(fi_now, net_m * 12, real_return, starting_assets)
         years_opt = _years_to_fi(fi_opt, (net_m + extra_monthly) * 12, real_return, starting_assets)
         years_saved = (round(years_now - years_opt, 1)
                        if years_now is not None and years_opt is not None else None)
-    else:  # credit card: no income -> no timeline
+    else:  # spending-only (credit card, no income entered) -> no timeline
         years_now = years_opt = years_saved = None
 
     return {"annual_expenses_now": annual_expenses_now, "annual_expenses_opt": annual_expenses_opt,
@@ -239,7 +246,7 @@ def _headline(baseline: dict, comparison: dict, projection: dict, doc_type: str,
     if projection.get("reachable_now") and saved and saved > 0:
         return (f"大约提前 {saved} 年实现财务自由。" if zh else
                 f"Reach financial freedom about {saved} years sooner.")
-    if doc_type == "credit_card_statement":
+    if doc_type == "credit_card_statement" and baseline["net_monthly"] is None:
         drop = round(projection["fi_number_now"] - projection["fi_number_opt"], 2)
         return (f"每月多挤出 {_money(extra)},自由数字降低 {_money(drop)}。" if zh else
                 f"Free up {_money(extra)}/mo and cut your freedom number by {_money(drop)}.")
@@ -269,8 +276,8 @@ def financial_story(baseline: dict, comparison: dict, projection: dict,
                 f"bring financial freedom about {saved} years sooner. Small, steady changes compound "
                 f"into years of your life back.")
 
-    # 2) credit card — spending only, no income/timeline
-    if doc_type == "credit_card_statement":
+    # 2) credit card — spending only, no income/timeline (skip once income is supplied)
+    if doc_type == "credit_card_statement" and baseline["net_monthly"] is None:
         drop = round(projection["fi_number_now"] - projection["fi_number_opt"], 2)
         if zh:
             return (f"这张卡本期约有 {_money(baseline['expenses_monthly'])}/月 的支出。"
@@ -290,7 +297,8 @@ def financial_story(baseline: dict, comparison: dict, projection: dict,
 
 
 def _assumptions(months: float, derived: bool, multi_month: bool, real_return: float,
-                 starting_assets: float, doc_type: str, lang: str) -> dict:
+                 starting_assets: float, doc_type: str, lang: str,
+                 user_income: Optional[float] = None, fixed_costs: Optional[float] = None) -> dict:
     zh = lang == "zh"
     notes = []
     if not derived:
@@ -306,9 +314,19 @@ def _assumptions(months: float, derived: bool, multi_month: bool, real_return: f
                   if zh else
                   f"Assumes a {round(real_return * 100)}% real annual return and defines freedom as "
                   f"25× annual expenses (the 4% safe-withdrawal rule)."))
-    if doc_type == "credit_card_statement":
-        notes.append(("信用卡账单只含支出;收入与时间线需要一份银行账单。" if zh else
-                      "A credit-card statement shows spending only; income and a timeline need a bank statement."))
+    # user-supplied inputs (each optional) — surfaced so the plan is transparent
+    if user_income is not None:
+        notes.append((f"按你填写的月收入 {_money(user_income)} 计算(而非从账单推断)。" if zh else
+                      f"Using the monthly income you entered ({_money(user_income)}), not the statement's."))
+    if starting_assets and starting_assets > 0:
+        notes.append((f"从你现有的储蓄/投资 {_money(starting_assets)} 起算时间线。" if zh else
+                      f"Timeline starts from your current savings/investments of {_money(starting_assets)}."))
+    if fixed_costs is not None:
+        notes.append((f"按你填写的固定支出约 {_money(fixed_costs)}/月,可优化空间已相应受限。" if zh else
+                      f"Optimizable savings are capped by your ~{_money(fixed_costs)}/mo of fixed costs."))
+    if doc_type == "credit_card_statement" and user_income is None:
+        notes.append(("信用卡账单只含支出;收入与时间线需要一份银行账单,或在上方填写月收入。" if zh else
+                      "A credit-card statement shows spending only; add a bank statement or enter your monthly income for a timeline."))
     return {"months": months, "period_derived": derived, "multi_month": multi_month,
             "real_return": real_return, "fi_multiple": FI_MULTIPLE,
             "starting_assets": starting_assets, "notes": notes}
@@ -325,21 +343,28 @@ def _disclaimer(lang: str) -> str:
 # ---------------- orchestration ----------------
 def build_plan(analysis: dict, data: dict, doc_type: str, lang: str = "en",
                have_key: bool = False, *, real_return: float = DEFAULT_RETURN,
-               starting_assets: float = 0.0) -> dict:
+               starting_assets: float = 0.0, user_income: Optional[float] = None,
+               fixed_costs: Optional[float] = None) -> dict:
     """Full Financial Freedom Plan dict for the UI. Deterministic math + a two-tier
-    story (LLM when a key is set, deterministic template otherwise). Never raises."""
+    story (LLM when a key is set, deterministic template otherwise). Never raises.
+
+    Optional user inputs sharpen the plan: `user_income` overrides the statement's income
+    (and unlocks a timeline for a spending-only card), `starting_assets` seeds the timeline
+    from existing savings, `fixed_costs` caps the optimizable savings to the discretionary
+    part of spending. All default to the prior behaviour when omitted."""
     lang = "zh" if lang == "zh" else "en"
     if doc_type not in _LEDGER:
         return {"available": False, "doc_type": doc_type}
 
     rows = analysis.get("rows") or []
     months, derived, multi_month = _period_months(data, rows, doc_type)
-    baseline = _baseline(analysis, doc_type, months)
+    baseline = _baseline(analysis, doc_type, months, income_override=user_income)
 
     # not enough to plan on (empty / zero-spend statement)
     if baseline["expenses_monthly"] <= 0 and not baseline["expenses_by_category"]:
         return {"available": True, "insufficient": True, "doc_type": doc_type,
-                "assumptions": _assumptions(months, derived, multi_month, real_return, starting_assets, doc_type, lang),
+                "assumptions": _assumptions(months, derived, multi_month, real_return, starting_assets,
+                                            doc_type, lang, user_income, fixed_costs),
                 "note": ("交易数据不足,无法生成规划。" if lang == "zh" else
                          "Not enough transaction data to build a plan.")}
 
@@ -347,10 +372,14 @@ def build_plan(analysis: dict, data: dict, doc_type: str, lang: str = "en",
     rec_opps = _recurring_opps(rows, lang)
     opportunities = cat_opps + rec_opps
     extra_monthly = round(sum(o["monthly_savings"] for o in opportunities if o["counted"]), 2)
+    # honour a user-stated essentials floor: never claim to trim below fixed costs
+    if fixed_costs is not None:
+        pool = round(max(0.0, baseline["expenses_monthly"] - fixed_costs), 2)
+        extra_monthly = min(extra_monthly, pool)
 
     projection = _projection(baseline, extra_monthly, doc_type, real_return, starting_assets)
 
-    if doc_type == "bank_statement" and baseline["income_monthly"] and baseline["income_monthly"] > 0:
+    if baseline["income_monthly"] and baseline["income_monthly"] > 0:
         opt_surplus = round((baseline["net_monthly"] or 0) + extra_monthly, 2)
         comparison = {
             "current": {"savings_rate": baseline["savings_rate"], "monthly_surplus": baseline["net_monthly"]},
@@ -401,8 +430,9 @@ def build_plan(analysis: dict, data: dict, doc_type: str, lang: str = "en",
 
     return {
         "available": True, "doc_type": doc_type,
-        "income_available": doc_type == "bank_statement" and baseline["income_monthly"] is not None,
-        "assumptions": _assumptions(months, derived, multi_month, real_return, starting_assets, doc_type, lang),
+        "income_available": baseline["income_monthly"] is not None,
+        "assumptions": _assumptions(months, derived, multi_month, real_return, starting_assets,
+                                    doc_type, lang, user_income, fixed_costs),
         "baseline": baseline, "opportunities": opportunities,
         "comparison": comparison, "projection": projection,
         "headline": headline, "story": story, "disclaimer": _disclaimer(lang),

@@ -54,6 +54,9 @@ select,input[type=password],input[type=text],input[type=number],textarea{width:1
 select:focus,input:focus,textarea:focus{outline:3px solid var(--brand-soft);border-color:var(--brand)}
 .field{margin:12px 0}.field label{display:block;font-weight:600;margin-bottom:6px;font-size:12.5px}
 .checkbox{display:flex;align-items:center;gap:8px;margin:11px 0 2px;font-weight:550;cursor:pointer}.checkbox input{width:auto;accent-color:var(--brand)}
+.freedom-inputs{margin:8px 0 2px;padding:12px 13px;border:1px dashed var(--brand);border-radius:12px;background:var(--brand-soft)}
+.freedom-inputs .fin-hint{margin:0 0 6px;font-size:12px}
+.freedom-inputs .field{margin:9px 0}.freedom-inputs .field:first-of-type{margin-top:0}.freedom-inputs .field:last-child{margin-bottom:0}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 .inline{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.inline .field{margin:0}
 

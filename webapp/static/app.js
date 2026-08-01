@@ -41,11 +41,17 @@ function initSource(){
     $("samplePanel").classList.toggle("hidden", state.src!=="sample");
   });
   const dz=$("dropzone"), fi=$("fileInput");
-  dz.onclick=()=>fi.click(); fi.onchange=()=>setFile(fi.files[0]);
+  // dz is a <label> wrapping #fileInput — its native label→input activation opens the
+  // dialog once. Do NOT also call fi.click() here, or the dialog opens twice and the
+  // second request cancels the first ("needs two clicks" bug).
+  fi.onchange=()=>setFile(fi.files[0]);
   ["dragover","dragenter"].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.add("drag")}));
   ["dragleave","drop"].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.remove("drag")}));
   dz.addEventListener("drop",ev=>setFile(ev.dataTransfer.files[0]));
   $("sampleType").onchange=loadSamples; loadSamples();
+  // reveal the optional financial inputs only while the Freedom Plan is opted in
+  const fp=$("freedomPlan"), fpi=$("freedomInputs");
+  if(fp && fpi){ const sync=()=>fpi.classList.toggle("hidden", !fp.checked); fp.addEventListener("change",sync); sync(); }
 }
 function setFile(f){ if(!f) return; state.file=f; $("fileName").textContent=f.name; }
 async function loadSamples(){
@@ -85,7 +91,11 @@ async function analyze(overrideType){
     if($("llmCat")?.checked) fd.append("use_llm_cat","1");
     if($("thinking")?.checked) fd.append("thinking","1");
   }
-  if($("freedomPlan")?.checked) fd.append("freedom","1");   // opt-in, all roles
+  if($("freedomPlan")?.checked){                            // opt-in, all roles
+    fd.append("freedom","1");
+    const put=(id,name)=>{ const v=($(id)?.value||"").trim(); if(v!=="") fd.append(name,v); };
+    put("finIncome","income_monthly"); put("finSavings","starting_assets"); put("finFixed","fixed_costs");
+  }
   fd.append("lang",LANG);
   btn.disabled=true; btn.innerHTML=`<span class="spinner"></span> ${esc(t("analyzing"))}`;
   showLoading();
