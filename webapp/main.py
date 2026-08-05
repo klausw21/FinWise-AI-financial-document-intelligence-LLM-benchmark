@@ -23,6 +23,7 @@ from src import dataset as ds
 from src import detect, insights, methods, present, store
 from src.advice import build_advice
 from src.freedom import build_plan
+from src.extract import llm
 from src.extract.base import ExtractResult
 from src.gold.build import gold_for
 
@@ -238,11 +239,17 @@ async def api_analyze(
         else:
             pdf_path = None
         if not detected:
-            detected, score = detect.detect_scored_from_paths(
-                pdf_path=pdf_path, image_path=img_path, filename=file.filename)
-            if score == 0:   # only the fallback guess -> ask the user instead of mis-extracting
-                return JSONResponse({"status": "needs_type", "guess": detected,
-                                     "notice": [_NOTICES["needs_type"][lang]]})
+            # with a key, let the vision model classify (handles non-standard reports and
+            # skips the manual picker entirely); fall back to the free keyword heuristic.
+            if _have_key():
+                detected = llm.classify_doc_type(page_paths) or detect.detect_from_paths(
+                    pdf_path=pdf_path, image_path=img_path, filename=file.filename)
+            else:
+                detected, score = detect.detect_scored_from_paths(
+                    pdf_path=pdf_path, image_path=img_path, filename=file.filename)
+                if score == 0:   # no key + can't guess -> ask (uploads can't extract anyway)
+                    return JSONResponse({"status": "needs_type", "guess": detected,
+                                         "notice": [_NOTICES["needs_type"][lang]]})
         doc = ds.DocPaths(stem=raw.stem, doc_type=detected, label_path=tmp / "x.json",
                           image_path=img_path, pdf_path=pdf_path or img_path, text_path=tmp / "x.txt",
                           image_paths=page_paths)

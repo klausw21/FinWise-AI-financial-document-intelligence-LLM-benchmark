@@ -106,27 +106,32 @@ def _category_rows(rows: list[dict], category: str) -> list[dict]:
 
 
 def _baseline(analysis: dict, doc_type: str, months: float,
-              income_override: Optional[float] = None) -> dict:
+              income_override: Optional[float] = None,
+              fixed_costs: Optional[float] = None) -> dict:
     """Monthly income / expenses / net / savings-rate + per-category expense breakdown.
     A user-supplied income_override wins for any doc type — it corrects a misread bank
-    income and, for a credit-card statement (spending-only), unlocks a full timeline."""
+    income and, for a credit-card statement (spending-only), unlocks a full timeline.
+    fixed_costs (rent etc. not captured by the statement) are added to monthly expenses
+    so net savings actually deduct them and the freedom number covers them."""
     cf = analysis.get("cashflow") or {}
     cats = analysis.get("category_totals") or {}
     outflow = cf.get("outflow") or 0
     inflow = cf.get("inflow") or 0
-    net = cf.get("net")
 
-    expenses_monthly = round(outflow / months, 2)
+    doc_expenses = round(outflow / months, 2)
+    expenses_monthly = round(doc_expenses + (fixed_costs or 0.0), 2)   # rent folded into total spend
+
     if income_override is not None:
         income_monthly = round(income_override, 2)
-        net_monthly = round(income_monthly - expenses_monthly, 2)
-        savings_rate = round(net_monthly / income_monthly, 4) if income_monthly > 0 else None
     elif doc_type == "bank_statement":
         income_monthly = round(inflow / months, 2)
-        net_monthly = round((net if net is not None else inflow - outflow) / months, 2)
+    else:  # credit card: "inflow" is card payments, not income -> unknown income
+        income_monthly = None
+    if income_monthly is not None:
+        net_monthly = round(income_monthly - expenses_monthly, 2)     # already net of fixed_costs
         savings_rate = round(net_monthly / income_monthly, 4) if income_monthly > 0 else None
-    else:  # credit card: "inflow" is card payments, not income -> unknown income/net
-        income_monthly = net_monthly = savings_rate = None
+    else:
+        net_monthly = savings_rate = None
 
     by_cat = []
     for cat, total in cats.items():
@@ -136,6 +141,7 @@ def _baseline(analysis: dict, doc_type: str, months: float,
                        "trim": _TRIM.get(cat, 0.0)})
     by_cat.sort(key=lambda c: -c["monthly"])
     return {"income_monthly": income_monthly, "expenses_monthly": expenses_monthly,
+            "doc_expenses_monthly": doc_expenses, "fixed_costs": (fixed_costs or None),
             "net_monthly": net_monthly, "savings_rate": savings_rate,
             "expenses_by_category": by_cat}
 
@@ -164,36 +170,6 @@ def _category_opps(baseline: dict, rows: list[dict], lang: str) -> list[dict]:
                        f"Review your {cat} spending — a ~{int(pct * 100)}% trim is realistic"),
         })
     return opps
-
-
-def _recurring_opps(rows: list[dict], lang: str) -> list[dict]:
-    """Same merchant + same amount 2+ times = a subscription worth reviewing.
-    counted=False: these dollars already live inside a category total, so we surface
-    them for review without adding them again to the optimized savings."""
-    zh = lang == "zh"
-    from collections import defaultdict
-    groups: dict[tuple, list[dict]] = defaultdict(list)
-    for r in rows:
-        if r.get("category") in _NON_TRIM:
-            continue
-        desc = pp.norm_str(_row_desc(r))
-        amt = pp._row_amount(r)
-        if desc and amt > 0:
-            groups[(desc, round(amt, 2))].append(r)
-    opps = []
-    for (_, amt), grp in groups.items():
-        if len(grp) < 2:
-            continue
-        ev = [f"{_row_desc(r)} · {r.get('date') or '—'} · {_money(pp._row_amount(r))}" for r in grp[:3]]
-        opps.append({
-            "type": "recurring", "category": grp[0].get("category", "Other"), "counted": False,
-            "current_monthly": round(amt, 2), "trim_pct": None, "monthly_savings": round(amt, 2),
-            "evidence": ev,
-            "action": ("复核这笔周期性扣款 —— 确认是否仍需要" if zh else
-                       "Review this recurring charge — confirm it's still wanted"),
-        })
-    opps.sort(key=lambda o: -o["monthly_savings"])
-    return opps[:4]
 
 
 # ---------------- projection ----------------
@@ -322,8 +298,8 @@ def _assumptions(months: float, derived: bool, multi_month: bool, real_return: f
         notes.append((f"从你现有的储蓄/投资 {_money(starting_assets)} 起算时间线。" if zh else
                       f"Timeline starts from your current savings/investments of {_money(starting_assets)}."))
     if fixed_costs is not None:
-        notes.append((f"按你填写的固定支出约 {_money(fixed_costs)}/月,可优化空间已相应受限。" if zh else
-                      f"Optimizable savings are capped by your ~{_money(fixed_costs)}/mo of fixed costs."))
+        notes.append((f"已把你填写的固定支出/房租 {_money(fixed_costs)}/月 计入月支出(结余与自由数字已相应调整)。" if zh else
+                      f"Added your fixed costs / rent ({_money(fixed_costs)}/mo) to monthly expenses (net savings and freedom number adjusted)."))
     if doc_type == "credit_card_statement" and user_income is None:
         notes.append(("信用卡账单只含支出;收入与时间线需要一份银行账单,或在上方填写月收入。" if zh else
                       "A credit-card statement shows spending only; add a bank statement or enter your monthly income for a timeline."))
@@ -350,15 +326,17 @@ def build_plan(analysis: dict, data: dict, doc_type: str, lang: str = "en",
 
     Optional user inputs sharpen the plan: `user_income` overrides the statement's income
     (and unlocks a timeline for a spending-only card), `starting_assets` seeds the timeline
-    from existing savings, `fixed_costs` caps the optimizable savings to the discretionary
-    part of spending. All default to the prior behaviour when omitted."""
+    from existing savings, `fixed_costs` (rent etc. not in the statement) are added to
+    monthly expenses so net savings deduct them. All default to the prior behaviour when
+    omitted."""
     lang = "zh" if lang == "zh" else "en"
     if doc_type not in _LEDGER:
         return {"available": False, "doc_type": doc_type}
 
     rows = analysis.get("rows") or []
     months, derived, multi_month = _period_months(data, rows, doc_type)
-    baseline = _baseline(analysis, doc_type, months, income_override=user_income)
+    baseline = _baseline(analysis, doc_type, months, income_override=user_income,
+                         fixed_costs=fixed_costs)
 
     # not enough to plan on (empty / zero-spend statement)
     if baseline["expenses_monthly"] <= 0 and not baseline["expenses_by_category"]:
@@ -368,14 +346,8 @@ def build_plan(analysis: dict, data: dict, doc_type: str, lang: str = "en",
                 "note": ("交易数据不足,无法生成规划。" if lang == "zh" else
                          "Not enough transaction data to build a plan.")}
 
-    cat_opps = _category_opps(baseline, rows, lang)
-    rec_opps = _recurring_opps(rows, lang)
-    opportunities = cat_opps + rec_opps
+    opportunities = _category_opps(baseline, rows, lang)   # discretionary category trims only
     extra_monthly = round(sum(o["monthly_savings"] for o in opportunities if o["counted"]), 2)
-    # honour a user-stated essentials floor: never claim to trim below fixed costs
-    if fixed_costs is not None:
-        pool = round(max(0.0, baseline["expenses_monthly"] - fixed_costs), 2)
-        extra_monthly = min(extra_monthly, pool)
 
     projection = _projection(baseline, extra_monthly, doc_type, real_return, starting_assets)
 

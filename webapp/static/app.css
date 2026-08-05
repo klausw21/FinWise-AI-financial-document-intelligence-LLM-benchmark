@@ -287,6 +287,7 @@ pre.think{background:var(--brand-soft);color:var(--ink);border:1px solid var(--l
 .freedom-hero .fh-badge{display:inline-block;background:var(--grad);color:#fff;font-weight:700;font-size:15px;padding:8px 15px;border-radius:999px;box-shadow:var(--shadow-lg)}
 .freedom-story{margin:0 0 16px;font-size:14.5px;line-height:1.6;color:var(--ink);font-weight:500}
 .freedom-tiles{margin-bottom:6px}
+.freedom-fixed-note{font-size:12px;margin:4px 0 0}
 .freedom-note{font-size:12px;margin:2px 0 4px}
 .rcard-sub{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 15px;margin:12px 0;box-shadow:var(--shadow-sm)}
 .rcard-sub h4{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}

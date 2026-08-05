@@ -302,7 +302,9 @@ function freedomBaseline(b){
   tiles+=tile(t("freedom.expenses"), "$"+money(b.expenses_monthly));
   if(b.net_monthly!=null) tiles+=tile(t("freedom.net"), "$"+money(b.net_monthly));
   if(b.savings_rate!=null) tiles+=tile(t("freedom.savingsrate"), Math.round(b.savings_rate*100)+"%");
-  return `<div class="tiles freedom-tiles">${tiles}</div>`;
+  let out=`<div class="tiles freedom-tiles">${tiles}</div>`;
+  if(b.fixed_costs>0) out+=`<div class="freedom-fixed-note muted">${esc(t("freedom.incl_fixed").replace("{v}", "$"+money(b.fixed_costs)))}</div>`;
+  return out;
 }
 function freedomBars(cmp){
   const cur=cmp.current, opt=cmp.optimized;

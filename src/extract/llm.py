@@ -253,3 +253,43 @@ def story(figures: dict, lang: str, model: str = "claude-haiku-4-5") -> dict:
         "cost_usd": _cost(model, u.input_tokens, u.output_tokens),
         "input_tokens": u.input_tokens, "output_tokens": u.output_tokens,
     }
+
+
+_DOC_TYPES = ("bank_statement", "credit_card_statement", "invoice", "receipt")
+
+_CLASSIFY_SYSTEM = (
+    "You classify a financial document image into exactly ONE of these type keys:\n"
+    "- bank_statement: a bank account statement with deposits/withdrawals and a running balance\n"
+    "- credit_card_statement: a credit-card statement or a spending report of card transactions "
+    "(charges, minimum payment, new/previous balance, credit limit)\n"
+    "- invoice: a bill issued to a customer (invoice number, bill to, amount due)\n"
+    "- receipt: a store purchase receipt (merchant, line items, subtotal/total)\n"
+    "Pick the single closest key even when the document is non-standard (e.g. a monthly "
+    "spending summary of card activity -> credit_card_statement). Reply with ONLY the type "
+    "key, lowercase, nothing else."
+)
+
+
+def classify_doc_type(image_paths, model: str = "claude-haiku-4-5",
+                      max_edge: Optional[int] = 1024) -> Optional[str]:
+    """Vision classification of a document into one of the four types — used to skip the
+    manual type picker. Cheap by design (first pages, downscaled image, tiny output on
+    Haiku). Returns a valid type key, or None on error / unrecognized output."""
+    paths = list(image_paths) if isinstance(image_paths, (list, tuple)) else [image_paths]
+    content = []
+    for p in paths[:2]:   # first 1-2 pages is plenty to identify the type
+        b64, media = _encode_image(p, max_edge)
+        content.append({"type": "image", "source": {"type": "base64", "media_type": media, "data": b64}})
+    content.append({"type": "text", "text": "Classify this document. Reply with only the type key."})
+    try:
+        resp = _get_client().messages.create(
+            model=model, max_tokens=12, system=_CLASSIFY_SYSTEM,
+            messages=[{"role": "user", "content": content}])
+    except Exception:
+        return None
+    text = next((b.text for b in resp.content if b.type == "text"), "").strip().lower()
+    # credit_card_statement contains "statement" too, so match the most specific first
+    for t in ("credit_card_statement", "bank_statement", "invoice", "receipt"):
+        if t in text:
+            return t
+    return None
