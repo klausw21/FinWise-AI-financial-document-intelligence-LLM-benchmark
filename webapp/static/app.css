@@ -101,6 +101,10 @@ select:focus,input:focus,textarea:focus{outline:3px solid var(--brand-soft);bord
 .rcard.advice{background:linear-gradient(120deg,var(--brand-soft),var(--surface));border-color:var(--brand);border-left:4px solid var(--brand)}
 .rcard.advice h3{color:var(--brand-ink)}
 .advice-text{margin:0;font-size:15px;line-height:1.55;font-weight:550;color:var(--ink)}
+.advice-tips{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:7px}
+.advice-tips li{font-size:14px;line-height:1.5;font-weight:500;color:var(--ink)}
+.rows-details>summary{font-size:14px;font-weight:700;cursor:pointer;margin:0}
+.rows-details[open]>summary{margin-bottom:12px}
 .split{display:grid;grid-template-columns:210px 1fr;gap:18px}@media(max-width:720px){.split{grid-template-columns:1fr}}
 .doc-img{width:100%;border:1px solid var(--line);border-radius:10px}
 

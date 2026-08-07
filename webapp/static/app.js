@@ -171,7 +171,7 @@ function render(res){
   aHtml+=insightCards(res);
 
   const rows=a.rows||[];
-  if(rows.length) aHtml+=`<div class="rcard"><h3>${listTitle(res.doc_type)} · ${rows.length}</h3>${rowsTable(rows)}</div>`;
+  if(rows.length) aHtml+=`<div class="rcard"><details class="rows-details"><summary>${listTitle(res.doc_type)} · ${rows.length}</summary>${rowsTable(rows)}</details></div>`;
 
   if(isLedger && a.cashflow && Object.keys(a.cashflow).length){
     aHtml+=`<div class="rcard"><h3>${t("sec.cashflow")}</h3><div class="cf-donut"><div>${cashflow(a.cashflow)}${catBreak(a.category_totals||{})}</div>${donut(a.category_totals||{})}</div></div>`;
@@ -266,8 +266,12 @@ function insightCards(res){
 }
 
 function adviceCard(res){
-  const adv=res.advice; if(!adv||!adv.text) return "";
-  return `<div class="rcard advice"><h3>💡 ${t("sec.advice")}</h3><p class="advice-text">${esc(adv.text)}</p></div>`;
+  const adv=res.advice; if(!adv) return "";
+  const tips=(Array.isArray(adv.tips)&&adv.tips.length)?adv.tips:(adv.text?[adv.text]:[]);
+  if(!tips.length) return "";
+  const body = tips.length===1 ? `<p class="advice-text">${esc(tips[0])}</p>`
+    : `<ul class="advice-tips">${tips.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`;
+  return `<div class="rcard advice"><h3>💡 ${t("sec.advice")}</h3>${body}</div>`;
 }
 
 /* ---------- Financial Freedom Plan (static before/after · no sliders) ---------- */

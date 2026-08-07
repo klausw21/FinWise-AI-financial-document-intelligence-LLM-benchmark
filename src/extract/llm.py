@@ -187,23 +187,27 @@ def chat(doc_type: str, context: str, messages: list, model: str,
 
 _ADVISE_SYSTEM = (
     "You are a concise personal-finance advisor. Given a financial document's extracted "
-    "data and a short analysis summary, reply with EXACTLY ONE short, actionable financial "
-    "tip (about 30 words max). Cite one specific figure from the data. No preamble, no "
-    "lists, no markdown — just the single sentence. Respond in {lang}."
+    "data and a short analysis summary, reply with 3-5 short, actionable financial tips, "
+    "ordered by impact, each on its own line. Cover different angles: the 1-2 biggest "
+    "spending categories and roughly how much cutting them frees up, the savings rate / "
+    "cash-flow, any duplicate or unusually large charges, and one forward-looking move to "
+    "reach financial independence sooner. Each tip must cite a specific figure or category "
+    "from the data and be about 25 words max. No headers, no markdown, no bullet characters "
+    "— just one plain sentence per line. Respond in {lang}."
 )
 
 
 def advise(doc_type: str, context: str, summary: str, lang: str,
            model: str = "claude-haiku-4-5") -> dict:
-    """One-sentence financial tip grounded in the extracted data. Cheap by design
+    """3-5 financial tips (one per line) grounded in the extracted data. Cheap by design
     (short output on Haiku). Returns {text, cost_usd, latency_s, ...} or {error}."""
     lang_name = "Chinese (简体中文)" if lang == "zh" else "English"
     system = _ADVISE_SYSTEM.format(lang=lang_name)
     user = (f"Document type: {doc_type.replace('_', ' ')}\n"
             f"Analysis summary: {summary}\n\n"
             f"Extracted data (JSON):\n{context}\n\n"
-            f"Give one short financial tip.")
-    kwargs = {"model": model, "max_tokens": 200, "system": system,
+            f"Give 3-5 short financial tips, one per line.")
+    kwargs = {"model": model, "max_tokens": 400, "system": system,
               "messages": [{"role": "user", "content": user}]}
     t0 = time.perf_counter()
     try:
