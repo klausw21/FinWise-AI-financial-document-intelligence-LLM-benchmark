@@ -289,16 +289,27 @@ function freedomCard(res){
   const asm=p.assumptions||{};
   if(asm.multi_month) h+=`<div class="freedom-multimonth">📅 ${esc(t("freedom.multimonth").replace("{n}", Math.round(asm.months||0)))}</div>`;
   h+=`<div class="freedom-hero"><span class="fh-badge">${esc(p.headline)}</span></div>`;
+  h+=freedomSavings(p.savings);
   if(p.story&&p.story.text) h+=`<p class="freedom-story">${esc(p.story.text)}</p>`;
   h+=freedomBaseline(p.baseline);
   h+=`<div class="freedom-note muted">↔ ${t("freedom.optnote")}</div>`;
   h+=freedomBars(p.comparison);
-  h+=fiCurve(p);
   h+=freedomOpps(p.opportunities);
+  h+=`<details class="freedom-longterm"><summary>${t("freedom.longterm")}</summary>${fiCurve(p)}</details>`;
   h+=`<details class="freedom-assume"><summary>${t("freedom.assumptions")}</summary>
     <ul>${(p.assumptions.notes||[]).map(n=>`<li>${esc(n)}</li>`).join("")}</ul></details>`;
   h+=`<p class="freedom-disclaimer muted">⚠ ${esc(p.disclaimer)}</p>`;
   return h+`</div>`;
+}
+/* the motivating hero: money you keep + what it compounds to (near-term, tangible) */
+function freedomSavings(s){
+  if(!s || !(s.monthly>0)) return "";
+  let tiles = tile(s.from_trims ? t("freedom.hero_trim") : t("freedom.hero_surplus"), "$"+money(s.monthly));
+  tiles += tile(t("freedom.hero_year"), "$"+money(s.yearly));
+  tiles += tile(t("freedom.hero_5y"), "$"+money(s.grown_5y));
+  const note = t("freedom.hero_note").replace("{c5}","$"+money(s.cum_5y))
+    .replace("{c10}","$"+money(s.cum_10y)).replace("{g10}","$"+money(s.grown_10y));
+  return `<div class="tiles freedom-savings">${tiles}</div><div class="freedom-savings-note muted">💰 ${esc(note)}</div>`;
 }
 function freedomBaseline(b){
   let tiles="";

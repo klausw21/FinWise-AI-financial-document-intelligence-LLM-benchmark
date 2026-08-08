@@ -214,20 +214,37 @@ def _projection(baseline: dict, extra_monthly: float, doc_type: str,
             "reachable_now": years_now is not None}
 
 
+# ---------------- savings growth (the motivating hero) ----------------
+def _savings_growth(save_base: float, from_trims: bool, real_return: float) -> dict:
+    """Turn a monthly figure into tangible near-term numbers: yearly + what it grows to
+    if invested (real return, compounded). This is the plan's hero — concrete money you
+    keep, not a distant seven-figure FI target."""
+    base = max(0.0, round(save_base, 2))
+    annual = base * 12
+
+    def fv(years: int) -> float:
+        r = real_return
+        return annual * (((1 + r) ** years - 1) / r) if r > 0 else annual * years
+
+    return {"monthly": base, "from_trims": bool(from_trims),
+            "yearly": round(annual, 2),
+            "cum_5y": round(base * 60, 2), "grown_5y": round(fv(5), 2),
+            "cum_10y": round(base * 120, 2), "grown_10y": round(fv(10), 2)}
+
+
 # ---------------- deterministic story + headline ----------------
-def _headline(baseline: dict, comparison: dict, projection: dict, doc_type: str, lang: str) -> str:
+def _headline(baseline: dict, comparison: dict, projection: dict, savings: dict,
+              doc_type: str, lang: str) -> str:
     zh = lang == "zh"
-    extra = comparison["extra_monthly_savings"]
-    saved = projection.get("years_saved")
-    if projection.get("reachable_now") and saved and saved > 0:
-        return (f"大约提前 {saved} 年实现财务自由。" if zh else
-                f"Reach financial freedom about {saved} years sooner.")
-    if doc_type == "credit_card_statement" and baseline["net_monthly"] is None:
-        drop = round(projection["fi_number_now"] - projection["fi_number_opt"], 2)
-        return (f"每月多挤出 {_money(extra)},自由数字降低 {_money(drop)}。" if zh else
-                f"Free up {_money(extra)}/mo and cut your freedom number by {_money(drop)}.")
-    return (f"先让现金流转正 —— 每月约 {_money(extra)} 触手可及。" if zh else
-            f"Turn cash-flow positive first — about {_money(extra)}/mo is within reach.")
+    m, g5 = savings["monthly"], savings["grown_5y"]
+    if m > 0:
+        if savings["from_trims"]:
+            return (f"每月多省 {_money(m)},定投 5 年约滚存 {_money(g5)}。" if zh else
+                    f"Free up {_money(m)}/mo — about {_money(g5)} in 5 years invested.")
+        return (f"每月结余 {_money(m)},定投 5 年约滚存 {_money(g5)}。" if zh else
+                f"You keep {_money(m)}/mo — about {_money(g5)} in 5 years invested.")
+    return ("先让现金流转正 —— 从复核几类非必要开销开始。" if zh else
+            "Turn cash-flow positive first — start by reviewing a few discretionary categories.")
 
 
 def financial_story(baseline: dict, comparison: dict, projection: dict,
@@ -366,7 +383,15 @@ def build_plan(analysis: dict, data: dict, doc_type: str, lang: str = "en",
                                               if baseline["net_monthly"] is not None else None)},
             "extra_monthly_savings": extra_monthly}
 
-    headline = _headline(baseline, comparison, projection, doc_type, lang)
+    # the motivating hero: money you actually keep + what it grows to. Prefer the extra
+    # freed up by the plan; if there are no trims, grow the existing monthly surplus.
+    if extra_monthly > 0:
+        save_base, from_trims = extra_monthly, True
+    else:
+        save_base, from_trims = max(0.0, baseline["net_monthly"] or 0.0), False
+    savings = _savings_growth(save_base, from_trims, real_return)
+
+    headline = _headline(baseline, comparison, projection, savings, doc_type, lang)
 
     # two-tier story: LLM prose over the computed figures, else deterministic template
     t0 = time.perf_counter()
@@ -406,7 +431,7 @@ def build_plan(analysis: dict, data: dict, doc_type: str, lang: str = "en",
         "assumptions": _assumptions(months, derived, multi_month, real_return, starting_assets,
                                     doc_type, lang, user_income, fixed_costs),
         "baseline": baseline, "opportunities": opportunities,
-        "comparison": comparison, "projection": projection,
+        "comparison": comparison, "projection": projection, "savings": savings,
         "headline": headline, "story": story, "disclaimer": _disclaimer(lang),
     }
 

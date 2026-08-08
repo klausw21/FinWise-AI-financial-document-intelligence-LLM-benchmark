@@ -292,6 +292,13 @@ pre.think{background:var(--brand-soft);color:var(--ink);border:1px solid var(--l
 .freedom-story{margin:0 0 16px;font-size:14.5px;line-height:1.6;color:var(--ink);font-weight:500}
 .freedom-tiles{margin-bottom:6px}
 .freedom-fixed-note{font-size:12px;margin:4px 0 0}
+.freedom-savings{margin:12px 0 4px}
+.freedom-savings .tile{background:var(--brand-soft);border-color:var(--brand)}
+.freedom-savings .t-value{font-size:23px;color:var(--brand-ink)}
+.freedom-savings-note{font-size:12px;margin:2px 0 8px}
+.freedom-longterm{margin:12px 0}
+.freedom-longterm>summary{font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}
+.freedom-longterm[open]>summary{margin-bottom:10px}
 .freedom-note{font-size:12px;margin:2px 0 4px}
 .rcard-sub{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 15px;margin:12px 0;box-shadow:var(--shadow-sm)}
 .rcard-sub h4{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
