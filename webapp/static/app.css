@@ -88,6 +88,7 @@ select:focus,input:focus,textarea:focus{outline:3px solid var(--brand-soft);bord
 .board+.board{margin-top:26px;padding-top:22px;border-top:1px solid var(--line)}
 .board-head{margin:0 0 14px}
 .board-head h2{margin:0;font-size:16px;font-weight:700;letter-spacing:-.01em;color:var(--ink);display:flex;align-items:center;gap:8px}
+.plan-loading{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px}
 .empty-state{background:var(--surface);border:1px dashed var(--line);border-radius:var(--radius);padding:54px 30px;text-align:center;color:var(--muted)}
 .empty-state .es-icon{font-size:32px}.empty-state h3{color:var(--ink);margin:12px 0 6px}
 

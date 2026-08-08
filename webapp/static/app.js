@@ -184,11 +184,32 @@ function render(res){
     aHtml+=`<div class="rcard"><details class="raw"><summary>${t("raw.json")}</summary><pre class="json">${esc(JSON.stringify(res.data,null,2))}</pre></details></div>`;
   }
 
-  // ---------- board 2: financial planning ----------
-  const pHtml=adviceCard(res)+freedomCard(res);
+  // ---------- board 2: financial planning (filled by a 2nd /api/plan request) ----------
+  const havePlan = (res.advice!=null || res.freedom!=null);
+  const planBody = havePlan ? (adviceCard(res)+freedomCard(res))
+    : `<div class="rcard plan-loading"><span class="spinner"></span> ${t("plan.loading")}</div>`;
+  const planSection = `<section class="board"><div class="board-head"><h2>🚀 ${t("board.planning")}</h2></div><div id="planBody">${planBody}</div></section>`;
 
-  $("results").innerHTML = board("board.analysis","🗂",aHtml) + board("board.planning","🚀",pHtml) + chatPanel();
+  $("results").innerHTML = board("board.analysis","🗂",aHtml) + planSection + chatPanel();
   wireChat(); wireExport(res);
+  if(!havePlan) loadPlan(res);
+}
+/* second phase: fetch advice + freedom plan and fill the planning board */
+async function loadPlan(res){
+  const fi=res.freedom_inputs||{}, fd=new FormData();
+  fd.append("data", JSON.stringify(res.data||{})); fd.append("doc_type", res.doc_type||""); fd.append("lang", LANG);
+  if(fi.freedom) fd.append("freedom","1");
+  if(fi.use_llm_cat) fd.append("use_llm_cat","1");
+  ["income_monthly","starting_assets","fixed_costs"].forEach(k=>{ if(fi[k]!=null) fd.append(k, fi[k]); });
+  try{
+    const pr=await fetch("/api/plan",{method:"POST",body:fd}).then(r=>r.json());
+    res.advice=pr.advice; res.freedom=pr.freedom; state.last=res;
+    const body=$("planBody"); if(body) body.innerHTML=adviceCard(res)+freedomCard(res);
+    if(admin() && $("sessionCost")){
+      state.sessionCost += ((pr.advice&&pr.advice.cost_usd)||0) + ((pr.freedom&&pr.freedom.story&&pr.freedom.story.cost_usd)||0);
+      $("sessionCost").textContent="$"+state.sessionCost.toFixed(4);
+    }
+  }catch(e){ const body=$("planBody"); if(body) body.innerHTML=`<div class="rcard state-card err"><p class="muted">${esc(String(e))}</p></div>`; }
 }
 
 /* setup / needs-type / export */

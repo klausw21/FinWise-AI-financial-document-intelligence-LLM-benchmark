@@ -7,6 +7,7 @@ demo-grade (a role cookie, not real multi-tenant auth) — see the MVP roadmap.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import tempfile
@@ -281,11 +282,13 @@ async def api_analyze(
     src_text = "" if res.error else _source_text(doc)
     fields, review = present.build_fields(res.data or {}, detected, src_text, a)
     cards = [] if res.error else insights.build_insights(a, res.data or {}, detected, lang, review)
-    advice = None if res.error else build_advice(a, res.data or {}, detected, lang, have_key=_have_key())
-    plan = (build_plan(a, res.data or {}, detected, lang, have_key=_have_key(),
-                       starting_assets=_opt_num(starting_assets) or 0.0,
-                       user_income=_opt_num(income_monthly), fixed_costs=_opt_num(fixed_costs))
-            if freedom and not res.error else None)
+    # advice + freedom are computed by the second-phase /api/plan call so the analysis
+    # board can render as soon as extraction finishes (see two-phase loading). We echo the
+    # inputs so /api/plan (live and on history re-open) can reproduce the same plan.
+    freedom_inputs = {"freedom": bool(freedom), "use_llm_cat": bool(use_llm_cat),
+                      "income_monthly": _opt_num(income_monthly),
+                      "starting_assets": _opt_num(starting_assets),
+                      "fixed_costs": _opt_num(fixed_costs)}
     conf_mean = (round(sum(_LEVEL_SCORE[f["level"]] for f in fields) / len(fields), 3)
                  if fields else None)
     status = "error" if res.error else ("review" if review else "ok")
@@ -305,8 +308,8 @@ async def api_analyze(
         "input_tokens": res.input_tokens, "output_tokens": res.output_tokens,
         "error": res.error, "thinking": res.thinking, "notice": notice,
         "data": res.data or {}, "analysis": a,
-        "fields": fields, "review": review, "insights": cards, "advice": advice,
-        "freedom": plan,
+        "fields": fields, "review": review, "insights": cards,
+        "advice": None, "freedom": None, "freedom_inputs": freedom_inputs,
         "confidence": conf_mean, "needs_review": len(review), "status": status,
     }
     rec_id = store.save({
@@ -317,6 +320,41 @@ async def api_analyze(
     })
     payload["id"] = rec_id
     return JSONResponse(payload)
+
+
+@app.post("/api/plan")
+async def api_plan(
+    request: Request,
+    data: str = Form("{}"),
+    doc_type: str = Form(""),
+    lang: str = Form("en"),
+    freedom: str = Form(""),
+    use_llm_cat: str = Form(""),
+    income_monthly: str = Form(""),
+    starting_assets: str = Form(""),
+    fixed_costs: str = Form(""),
+):
+    """Second-phase compute for the Financial Planning board — advice tips + freedom plan.
+    Split out of /api/analyze so the analysis board can render the moment extraction ends.
+    build_advice and build_plan are independent, so run them concurrently (off the loop)."""
+    _role(request)                     # same auth surface as the rest of the API
+    lang = "zh" if lang == "zh" else "en"
+    try:
+        d = json.loads(data) if data else {}
+    except json.JSONDecodeError:
+        d = {}
+    a = await asyncio.to_thread(analyze_mod.analyze, d, doc_type, bool(use_llm_cat))
+    have_key = _have_key()
+    advice_task = asyncio.to_thread(build_advice, a, d, doc_type, lang, have_key)
+    if freedom:
+        plan_task = asyncio.to_thread(
+            build_plan, a, d, doc_type, lang, have_key,
+            starting_assets=_opt_num(starting_assets) or 0.0,
+            user_income=_opt_num(income_monthly), fixed_costs=_opt_num(fixed_costs))
+        advice, plan = await asyncio.gather(advice_task, plan_task)
+    else:
+        advice, plan = await advice_task, None
+    return JSONResponse({"advice": advice, "freedom": plan})
 
 
 # ---------------- history ----------------
